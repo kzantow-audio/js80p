@@ -268,98 +268,131 @@ Consequences:
 
 ## 5. The modulation UX
 
-Coordinated surfaces, all editing the same underlying assignments:
+### 5.0 The engine constraint we are working around
 
-**(a) Modulators panel — always visible, right third of the window.**
+JS80P is **not** an additive modulation matrix (§2.4). Each parameter has at most
+**one** controller; when assigned, the controller's 0–100 % output is mapped across
+the parameter's **entire** [min, max] range and the knob value is **ignored**. The
+range/shape lives entirely in the *source* (envelope levels, LFO min/max, macro
+min/max). Two destinations that want the same modulation *shape* but different
+*ranges* therefore need **two separate source objects** from the finite pools
+(12 envelopes, 8 LFOs, 30 macros).
 
-- A permanently visible, vertically-stacked, **scrollable** column of modulator
-  cards. This is the primary modulation surface (§7 places it in the layout).
-- **Defaults:** two **envelope** cards pre-mapped to **Osc 2 volume** and **filter
-  cutoff**, then one **LFO** card below.
-- **Assign an existing modulator** to another parameter → JS80P **silently
-  duplicates** it (copy-on-write, §6) into a new card, so the new destination gets
-  independent depth/shape.
-- **Add new** (envelope or LFO) → a fresh, non-duplicated card that then has the
-  same duplicate-on-assign behavior.
-- Each operation consumes one slot from the pool (12 envelopes / 8 LFOs); pool
-  usage and exhaustion are surfaced (§6).
+To make this behave like a normal per-connection-depth modulation system without
+touching the engine, the new GUI plays **three UI tricks**: it (a) re-maps what a
+knob edits once a modulator is assigned, (b) **groups duplicate source slots** that
+share a shape into a single on-screen editor, and (c) **auto-clones a fresh slot**
+whenever a shared modulator is dropped on a new destination.
 
-**(b) Knobs — clean by default, smart when assigned.**
+### 5.1 What an assigned knob edits (per-destination range)
 
-- Unassigned: a plain knob.
-- Assigned: a **colored ring + small type badge** (reusing `CTL_COLOR_*`) shows
-  what drives it; a live indicator shows the current driven value; a **poly/global
-  badge** shows whether the assignment makes the param per-voice.
-- **Turning an assigned knob edits the modulator, not a dead value.** Given the
-  substitution engine:
-  - Envelope / LFO assigned → the knob adjusts *that source's* depth/range for the
-    parameter (env levels / LFO min-max-amp), via its dedicated (duplicated)
-    per-destination modulator.
-  - MIDI CC / global source assigned → the knob's range is expressed through a
-    Macro (MIN/MAX = per-destination depth).
+When a modulator is assigned, the knob no longer writes the destination parameter
+(the engine ignores it anyway). Instead the knob and its **modulation-range**
+control drive the *source's* per-destination range parameters:
 
-**(c) Mod Matrix table — complementary overview.**
+| Source | Knob position writes | Range control writes |
+|---|---|---|
+| **Envelope** | Initial, Sustain, **and** Final levels (INI = SUS = FIN, tracked together) | Peak level |
+| **LFO** | Minimum value (MIN) | Maximum value (MAX) |
+| **Macro** (on envelope time/scale params) | Macro Minimum (MIN) | Macro Maximum (MAX) |
 
-- A table listing **every active source→destination assignment** as rows:
-  `Source | Destination | Depth/Range | Poly? | remove`, built by scanning
-  `get_param_controller_id_atomic()` across all params. Editing a row edits the
-  same thing as the card and the knob ring; shared/duplicated modulators show a
-  shared-slot indicator (§6). It complements — rather than replaces — the
-  always-visible Modulators panel.
+So e.g. the filter cutoff defaults to **Env 2** assigned: the cutoff knob sets that
+env's INI/SUS/FIN, and the modulation-range control sets its PEAK — exactly a
+"base value + depth" feel, expressed through the substitution engine.
 
-**(d) Macro editor — the one place to invest visually.**
+### 5.2 Grouping duplicates into one editor
 
-- A **transfer-function graph** for MIN / MAX / MIDPOINT / DISTORTION-curve /
-  RANDOMNESS. Macros are JS80P's entire "shaping" story; a good curve editor turns
-  240 raw macro params into a handful of legible objects.
+The **rightmost panel** is a list of **envelope and LFO editors — one per distinct
+shape** that is currently assigned somewhere:
+
+- **Envelopes are grouped by their shape times** — equal **Hold, Attack, Decay,
+  Release** ⇒ one editor. (Its INI/PK/SUS/FIN differ per destination and are edited
+  at the knob, not here.) Editing the shared shape in the panel edits **all**
+  grouped duplicate slots at once.
+- **LFOs are grouped by shape** — equal **Waveform, Pulse Width, Frequency (Hz),
+  Phase, Distortion, Randomness** ⇒ one editor; editing it updates every duplicate.
+  (Each duplicate's MIN/MAX differ per destination and are edited at the knob.)
+
+This yields the normal experience — *multiple controls sharing one modulator with
+different depths* — even though behind the scenes each connection consumes its own
+pool slot.
+
+### 5.3 Assigning: auto-clone on drop
+
+Assigning an **existing** modulator (a shape already in the panel) to a **new**
+control:
+
+1. allocates a **fresh unused** slot of that type from the pool,
+2. **copies the shape** into it (envelope H/A/D/R; LFO wav/pw/freq/phs/dist/rand),
+3. sets its per-destination range to **match the current knob position** (env
+   INI/SUS/FIN = knob, or LFO MIN = knob), leaving PEAK/MAX at a sane default,
+4. assigns that new slot as the destination's controller.
+
+The user then adjusts the range (PEAK / MAX) at the knob. Because the clone shares
+the group's shape key, it appears **inside the same panel editor** — the group just
+gained another (hidden) member.
+
+### 5.4 Macros — two distinct roles
+
+1. **Global performance strip (top of the plugin).** Macros **1–8** are always
+   visible knobs across a top strip. Each exposes only a **MIDI CC selector** (its
+   input) and its value; no other modulation options in the new GUI. Intended for
+   hardware/DAW automation; these CC bindings should survive INIT (§8.2) — see
+   round-trip note below.
+2. **Range modulator for envelope time/scale.** A modulator may also be assigned to
+   an envelope's **SCL, DEL, ATK, HOLD, DEC, REL** params. Doing so consumes a fresh
+   macro from the pool and uses it exactly like the LFO case: **current knob
+   position → macro MIN**, **modulation range → macro MAX**. This lets a MIDI CC
+   automate those envelope parameters.
 
 ---
 
-## 6. The modulator allocator (critical subsystem)
+## 6. The modulator grouping / allocator (critical subsystem)
 
-Per-destination depth is achieved by **carefully duplicating envelopes/LFOs (and
-macros) behind the scenes**, with copy-on-write semantics over finite pools.
+The subsystem is a **shape-grouping allocator** over the flat engine pools. It never
+changes the engine; it manages which pool slot backs which connection and keeps
+duplicates in sync.
 
-**Abstraction the user sees:** "this knob has its own modulator with its own
-depth/shape." No slot numbers.
+**Pools & per-slot parameters** (verified ids in `src/synth.hpp`):
 
-**Reality underneath:** finite pools — **12 envelopes, 8 LFOs, 30 macros** — each
-a shared object. (Macros 1–8 are reserved as user-facing global performance
-macros per §7, so the allocator draws its auto-depth macros from the remaining
-pool.) Depth/range for an envelope *is* its level params
-(initial/peak/sustain/final × scale); for an LFO it's min/max/amp; for a
-global/MIDI source it's a macro's MIN/MAX. Two destinations sharing a slot
-**cannot** have independent depth or shape, so independence requires a real clone.
+- **Envelope N** (1–12), 12-param stride from `N1SCL=339`:
+  - shape key: `HLD`, `ATK`, `DEC`, `REL`; shared shape also incl. `DEL`, `SCL`,
+    the three shape curves, inaccuracy.
+  - per-destination: `INI`, `PK`, `SUS`, `FIN`. Controller ids `ENVELOPE_1..6 =
+    149..154`, `ENVELOPE_7..12 = 172..177`.
+- **LFO N** (1–8), 7-param stride from `L1FRQ=484` (`FRQ,PHS,MIN,MAX,AMP,DST,RND`),
+  plus `WAV=555+`, `PW`, `CEN`, `SYN`, `LOG`:
+  - shape key: `WAV`, `PW`, `FRQ`, `PHS`, `DST`, `RND`.
+  - per-destination: `MIN`, `MAX`. Controller ids `LFO_1..8 = 141..148`.
+- **Macro N** (1–10 here), 7-param stride from `M1MID=129`
+  (`MID,IN,MIN,MAX,SCL,DST,RND`): per-destination `MIN`, `MAX`; input CC via `MnIN`.
+  Controller ids `MACRO_1.. = 131..`.
 
-**Copy-on-write allocator:**
+**Core operations:**
 
-1. Assigning "an envelope/LFO" to a knob grabs a free slot (or shares an identical
-   existing one).
-2. Destinations **share** a slot while their depth/shape are identical.
-3. On the first edit of depth/shape for one destination, the allocator **clones**
-   that slot's params into a fresh slot and reassigns only that destination —
-   independent thereafter.
-4. **Reference-counted cleanup:** unassigning a destination frees its clone when
-   nothing else uses it.
-5. **Pool accounting is surfaced, not hidden:** the UI shows remaining
-   env/LFO/macro capacity and, when a pool is exhausted, degrades gracefully with
-   a clear message ("out of independent envelopes — this knob will share
-   Envelope 4") instead of failing silently.
+1. **Group scan** — read `get_param_controller_id_atomic()` across all params to
+   find which slots are in use and by which destinations; bucket used slots by their
+   shape key to form the panel's editor list.
+2. **Allocate-on-assign** — take the lowest free slot of the type; if cloning from
+   an existing group, copy the shape key + shared shape params into it.
+3. **Edit-shape propagation** — an edit in a panel editor writes the changed shape
+   param to **every** slot in that group.
+4. **Free on unassign** — clearing a destination's controller returns its slot to
+   the pool.
+5. **Pool accounting surfaced** — show remaining env/LFO/macro capacity; when a pool
+   is exhausted, fall back to sharing an existing identical slot (losing independent
+   range) with a clear message rather than failing silently.
 
-**Two user operations map onto this** (surfaced in the Modulators panel, §5a):
-*assigning an existing modulator* to a new destination duplicates its current
-settings (copy-on-write); *adding a new modulator* allocates a fresh default one.
-Both consume a pool slot (12 envelopes, 8 LFOs); the panel is the direct view of
-those slots.
+**Round-tripping / patch format (must-have, partly deferred):** slots are ordinary
+envelopes/LFOs/macros, so **saved files stay standard JS80P patches** and open in
+the original GUI. On **load**, the group scan reconstructs the grouped editor view
+from the flat assignment map. The **macro-strip MIDI-CC bindings that persist across
+INIT** cannot live in the patch format (which we must not change); the plan is for
+the **new GUI to store those separately and re-apply them** even to existing
+patches created via the new GUI — *design to be finalised in a later iteration.*
 
-**Round-tripping (must-have):** clones are ordinary envelopes/LFOs/macros in the
-patch, so saved files remain standard JS80P patches. On **load**, the allocator
-reverse-engineers the flat 12/8/30 assignment map — detecting shared vs
-independent slots — and reconstructs the clean per-destination view. Existing
-presets open correctly; presets saved by the new GUI open in the original GUI.
-
-This subsystem is testable in isolation (allocate / share / clone-on-edit /
-free / load-time reverse mapping) and should be unit-tested against real patches.
+This subsystem is unit-testable in isolation (group scan / allocate / clone-on-drop
+/ shape propagation / free) and should be tested against real presets.
 
 ---
 
