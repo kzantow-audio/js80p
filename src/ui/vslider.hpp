@@ -51,6 +51,9 @@ class VSlider : public juce::Component
 
         void refresh();
 
+        /** Clamp the editable minimum (e.g. attack floored to 0.001). */
+        void set_min_ratio(double const r);
+
         void paint(juce::Graphics& g) override;
         void mouseDown(juce::MouseEvent const& event) override;
         void mouseDrag(juce::MouseEvent const& event) override;
@@ -58,10 +61,11 @@ class VSlider : public juce::Component
 
     private:
         static constexpr int BAR_W = 18;
+        static constexpr double DRAG_PIXELS_FULL_RANGE = 200.0;
 
         juce::Rectangle<int> bar() const;
         juce::Rectangle<int> curve_rect() const;
-        void set_value_from_mouse(int const y);
+        void write_ratio(double const r);
         void set_curve(int const index);
 
         ParamBridge& bridge;
@@ -69,9 +73,11 @@ class VSlider : public juce::Component
         std::vector<Synth::ParamId> curve_targets;
         juce::String const name;
         double ratio;
+        double min_ratio;
         int curve_index;
 
         bool dragging_curve;
+        double drag_start_ratio;
         int drag_start_curve;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VSlider)

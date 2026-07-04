@@ -112,6 +112,25 @@ class ParamBridge
             return synth.float_param_ratio_to_display_value(id, ratio);
         }
 
+        /** Inverse of display_value: the ratio whose display value is \c target
+         *  (binary search; assumes the mapping is monotonic). */
+        Number ratio_for_display(Synth::ParamId const id, Number const target) const noexcept
+        {
+            Number const at_min = display_value(id, 0.0);
+            Number const at_max = display_value(id, 1.0);
+            bool const increasing = at_max >= at_min;
+            Number lo = 0.0;
+            Number hi = 1.0;
+
+            for (int i = 0; i != 40; ++i) {
+                Number const mid = 0.5 * (lo + hi);
+                if ((display_value(id, mid) < target) == increasing) lo = mid;
+                else hi = mid;
+            }
+
+            return 0.5 * (lo + hi);
+        }
+
         /** Assigned controller, or NONE when the knob drives the value itself. */
         Synth::ControllerId controller(Synth::ParamId const id) const noexcept
         {

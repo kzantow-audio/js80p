@@ -46,7 +46,9 @@ ModulatorCard::ModulatorCard(
     };
 
     if (type == Modulation::ENVELOPE) {
-        sliders.add(new VSlider(bridge, build(Modulation::env_atk), "A", build(Modulation::env_ash)));
+        VSlider* const atk = new VSlider(bridge, build(Modulation::env_atk), "A", build(Modulation::env_ash));
+        atk->set_min_ratio(bridge.ratio_for_display(Modulation::env_atk(rep), 0.001));
+        sliders.add(atk);
         sliders.add(new VSlider(bridge, build(Modulation::env_hld), "H"));
         sliders.add(new VSlider(bridge, build(Modulation::env_dec), "D", build(Modulation::env_dsh)));
         sliders.add(new VSlider(bridge, build(Modulation::env_rel), "R", build(Modulation::env_rsh)));

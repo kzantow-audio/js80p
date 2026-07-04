@@ -69,9 +69,9 @@ class Knob : public juce::Component
     private:
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
-        static constexpr float DEPTH_R = 7.0f;
 
         juce::String format_value() const;
+        juce::String format_ratio(double const r) const;
         void commit(double const new_ratio);
 
         double ratio_to_visual(double const r) const;
@@ -85,7 +85,7 @@ class Knob : public juce::Component
         void open_assign_menu();
 
         juce::Rectangle<float> knob_circle() const;
-        juce::Point<float> depth_center() const;
+        juce::Rectangle<float> badge_rect() const;
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;

@@ -205,7 +205,13 @@ void Knob::refresh()
 
 juce::String Knob::format_value() const
 {
-    double const value = bridge.display_value(param_id, ratio);
+    return format_ratio(ratio);
+}
+
+
+juce::String Knob::format_ratio(double const r) const
+{
+    double const value = bridge.display_value(param_id, r);
 
     if (semitone_snap) {
         double const semitones = value / 100.0;
@@ -233,11 +239,16 @@ juce::Rectangle<float> Knob::knob_circle() const
 }
 
 
-juce::Point<float> Knob::depth_center() const
+juce::Rectangle<float> Knob::badge_rect() const
 {
+    /* The E#/L# label sits at the knob's top-right, clear of the circle. */
     juce::Rectangle<float> const kb = knob_circle();
-    float const r = kb.getWidth() * 0.5f;
-    return kb.getCentre().translated(r * 0.72f, -r * 0.72f);
+    float const w = 22.0f;
+    float const h = 13.0f;
+    float x = kb.getRight() - 2.0f;
+    x = juce::jmin(x, (float)getWidth() - w - 1.0f);
+    float const y = juce::jmax(0.0f, kb.getY() - 3.0f);
+    return juce::Rectangle<float>(x, y, w, h);
 }
 
 
@@ -305,21 +316,21 @@ void Knob::paint(juce::Graphics& g)
     float const ty = cy - std::cos(target_angle) * rr;
     g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
 
-    /* Top-right depth control: fill proportional to |depth|. */
-    juce::Point<float> const dc = depth_center();
-    g.setColour(Theme::INSET);
-    g.fillEllipse(dc.x - DEPTH_R, dc.y - DEPTH_R, DEPTH_R * 2.0f, DEPTH_R * 2.0f);
-    float const fr = DEPTH_R * (float)juce::jmin(1.0, std::fabs(depth));
-    g.setColour(active);
-    g.fillEllipse(dc.x - fr, dc.y - fr, fr * 2.0f, fr * 2.0f);
-    g.setColour(active);
-    g.drawEllipse(dc.x - DEPTH_R, dc.y - DEPTH_R, DEPTH_R * 2.0f, DEPTH_R * 2.0f, 1.0f);
-
-    juce::String const badge =
+    /* Top-right E#/L# handle: drag it to set the modulation amount. */
+    juce::Rectangle<float> const badge = badge_rect();
+    juce::String const label =
         juce::String(Modulation::prefix(mod_type)) + juce::String(mod_slot);
+    g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
+    g.fillRoundedRectangle(badge, 3.0f);
     g.setColour(active);
     g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
-    g.drawText(badge, value_area, juce::Justification::centred, false);
+    g.drawText(label, badge, juce::Justification::centred, false);
+
+    /* Below the knob: the line (base) value, or the amount while dragging it. */
+    double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
+    g.setColour(dragging_depth ? active : Theme::TEXT);
+    g.setFont(11.0f);
+    g.drawText(format_ratio(shown), value_area, juce::Justification::centred, false);
 }
 
 
@@ -391,7 +402,7 @@ void Knob::mouseDown(juce::MouseEvent const& event)
 
     dragging = true;
 
-    if (assigned && depth_center().getDistanceFrom(event.position) <= DEPTH_R + 2.0f) {
+    if (assigned && badge_rect().expanded(3.0f).contains(event.position)) {
         dragging_depth = true;
         drag_start_depth = depth;
     } else {
@@ -431,8 +442,13 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
 
 void Knob::mouseUp(juce::MouseEvent const& /* event */)
 {
+    bool const was_depth = dragging_depth;
     dragging = false;
     dragging_depth = false;
+
+    if (was_depth) {
+        repaint();   /* revert the below-knob value from amount to line value */
+    }
 }
 
 

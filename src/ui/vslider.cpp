@@ -37,8 +37,10 @@ VSlider::VSlider(
     curve_targets(std::move(curve_targets)),
     name(std::move(name)),
     ratio(0.0),
+    min_ratio(0.0),
     curve_index(0),
     dragging_curve(false),
+    drag_start_ratio(0.0),
     drag_start_curve(0)
 {
     setWantsKeyboardFocus(false);
@@ -47,6 +49,12 @@ VSlider::VSlider(
     if (!this->curve_targets.empty()) {
         curve_index = bridge.get_discrete(this->curve_targets.front());
     }
+}
+
+
+void VSlider::set_min_ratio(double const r)
+{
+    min_ratio = juce::jlimit(0.0, 1.0, r);
 }
 
 
@@ -94,15 +102,12 @@ juce::Rectangle<int> VSlider::curve_rect() const
 }
 
 
-void VSlider::set_value_from_mouse(int const y)
+void VSlider::write_ratio(double const r)
 {
-    juce::Rectangle<int> const b = bar();
-    double const r = juce::jlimit(0.0, 1.0, 1.0 - (double)(y - b.getY()) / (double)b.getHeight());
-
-    ratio = r;
+    ratio = juce::jlimit(min_ratio, 1.0, r);
 
     for (Synth::ParamId const p : value_targets) {
-        bridge.set_ratio(p, r);
+        bridge.set_ratio(p, ratio);
     }
 
     repaint();
@@ -185,7 +190,7 @@ void VSlider::mouseDown(juce::MouseEvent const& event)
     }
 
     dragging_curve = false;
-    set_value_from_mouse(event.y);
+    drag_start_ratio = ratio;
 }
 
 
@@ -197,7 +202,11 @@ void VSlider::mouseDrag(juce::MouseEvent const& event)
         return;
     }
 
-    set_value_from_mouse(event.y);
+    /* Relative drag; Ctrl slows it down for fine editing. */
+    double const sensitivity =
+        event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
+    double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
+    write_ratio(drag_start_ratio + delta);
 }
 
 
@@ -208,13 +217,7 @@ void VSlider::mouseDoubleClick(juce::MouseEvent const& event)
         return;
     }
 
-    ratio = bridge.get_default_ratio(value_targets.front());
-
-    for (Synth::ParamId const p : value_targets) {
-        bridge.set_ratio(p, ratio);
-    }
-
-    repaint();
+    write_ratio(bridge.get_default_ratio(value_targets.front()));
 }
 
 }
