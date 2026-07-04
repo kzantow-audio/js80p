@@ -30,6 +30,7 @@
 
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
+#include "ui/macro_strip.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/modulator_card.hpp"
 #include "ui/param_bridge.hpp"
@@ -85,6 +86,7 @@ class NewGui : public juce::Component, private juce::Timer
 
         ParamBridge bridge;
         ModulationManager manager;
+        MacroStrip macro_strip;
         juce::OwnedArray<ModulatorCard> cards;
         std::string card_sig;
         juce::OwnedArray<Knob> knobs;

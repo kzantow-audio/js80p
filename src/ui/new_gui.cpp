@@ -35,6 +35,7 @@ static juce::StringArray const MODES {
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
     manager(bridge),
+    macro_strip(bridge),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
@@ -44,6 +45,8 @@ NewGui::NewGui(Synth& synth)
     osc2_type(nullptr)
 {
     setOpaque(true);
+
+    addAndMakeVisible(macro_strip);
 
     /* Osc 1 (modulator). */
     osc1_wave = add_wave(Synth::ParamId::MWFM);
@@ -208,6 +211,8 @@ void NewGui::timerCallback()
     for (ModulatorCard* const card : cards) {
         card->refresh();
     }
+
+    macro_strip.refresh();
 }
 
 
@@ -245,6 +250,7 @@ void NewGui::resized()
     juce::Rectangle<int> area = getLocalBounds();
 
     header_bounds = area.removeFromTop(46);
+    macro_strip.setBounds(area.removeFromTop(66));
     area.reduce(5, 5);
 
     int const gap = 5;
