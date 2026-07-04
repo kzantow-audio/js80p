@@ -425,8 +425,12 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
     double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
 
     if (semitone_snap && !event.mods.isCtrlDown()) {
-        double const cents = bridge.display_value(param_id, new_ratio);
-        new_ratio = ratio_for_display(std::round(cents / 100.0) * 100.0);
+        /* Snap the *movement* to whole semitones, keeping any fine offset the
+         * drag started from (e.g. 3.5 -> 4.5, not 4.0). */
+        double const start_cents = bridge.display_value(param_id, visual_to_ratio(drag_start_visual));
+        double const raw_cents = bridge.display_value(param_id, new_ratio);
+        double const snapped = start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0;
+        new_ratio = ratio_for_display(snapped);
     }
 
     commit(new_ratio);
@@ -463,11 +467,10 @@ void Knob::mouseWheelMove(
     }
 
     if (semitone_snap && !event.mods.isCtrlDown()) {
-        double const semitones = bridge.display_value(param_id, ratio) / 100.0;
-        double const next = wheel.deltaY > 0.0f
-            ? std::floor(semitones) + 1.0
-            : std::ceil(semitones) - 1.0;
-        commit(ratio_for_display(next * 100.0));
+        /* Step by exactly one semitone, keeping any fine offset. */
+        double const cents = bridge.display_value(param_id, ratio);
+        double const step = wheel.deltaY > 0.0f ? 100.0 : -100.0;
+        commit(ratio_for_display(cents + step));
         return;
     }
 
