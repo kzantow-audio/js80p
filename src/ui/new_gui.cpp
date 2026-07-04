@@ -24,14 +24,29 @@
 namespace JS80P
 {
 
+static juce::StringArray const FILTER_TYPES {
+    "LP", "HP", "BP", "Notch", "Bell", "LS", "HS"
+};
+
+static juce::StringArray const MODES {
+    "Mix&Mod",
+    "Split C3", "Split Db3", "Split D3", "Split Eb3", "Split E3", "Split F3",
+    "Split Gb3", "Split G3", "Split Ab3", "Split A3", "Split Bb3", "Split B3",
+    "Split C4"
+};
+
+
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
     osc1_wave(nullptr),
-    osc2_wave(nullptr)
+    osc2_wave(nullptr),
+    osc1_filter_type(nullptr),
+    osc2_filter_type(nullptr),
+    mode_selector(nullptr)
 {
     setOpaque(true);
 
-    /* Osc 1 (modulator): waveform, then amp / tuning / type rows. */
+    /* Osc 1 (modulator). */
     osc1_wave = add_wave(Synth::ParamId::MWFM);
     add_knob(osc1, Synth::ParamId::MAMP, "AMP");
     add_knob(osc1, Synth::ParamId::MVS,  "VEL");
@@ -44,9 +59,13 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc1, Synth::ParamId::MN,   "NOISE");
     add_knob(osc1, Synth::ParamId::MFLD, "FOLD");
     add_knob(osc1, Synth::ParamId::MSUB, "SUB");
-    add_knob(osc1, Synth::ParamId::MF1FRQ, "F.FRQ");
+    osc1_filter_type = add_selector(Synth::ParamId::MF1TYP, FILTER_TYPES, "FILTER 1");
+    add_knob(osc1_filter, Synth::ParamId::MF1FRQ, "FREQ");
+    add_knob(osc1_filter, Synth::ParamId::MF1Q,   "Q");
+    add_knob(osc1_filter, Synth::ParamId::MF1G,   "GAIN");
 
     /* Mix column. */
+    mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
     add_knob(mix, Synth::ParamId::MIX, "MIX");
     add_knob(mix, Synth::ParamId::PM,  "PM");
     add_knob(mix, Synth::ParamId::FM,  "FM");
@@ -65,7 +84,10 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc2, Synth::ParamId::CN,   "NOISE");
     add_knob(osc2, Synth::ParamId::CFLD, "FOLD");
     add_knob(osc2, Synth::ParamId::CDL,  "DIST");
-    add_knob(osc2, Synth::ParamId::CF1FRQ, "F.FRQ");
+    osc2_filter_type = add_selector(Synth::ParamId::CF1TYP, FILTER_TYPES, "FILTER 1");
+    add_knob(osc2_filter, Synth::ParamId::CF1FRQ, "FREQ");
+    add_knob(osc2_filter, Synth::ParamId::CF1Q,   "Q");
+    add_knob(osc2_filter, Synth::ParamId::CF1G,   "GAIN");
 
     startTimerHz(30);
 }
@@ -101,6 +123,19 @@ WaveformSelector* NewGui::add_wave(Synth::ParamId const id)
 }
 
 
+Selector* NewGui::add_selector(
+        Synth::ParamId const id, juce::StringArray options, juce::String caption
+) {
+    Selector* const selector = new Selector(
+        bridge, id, std::move(options), std::move(caption)
+    );
+    selectors.add(selector);
+    addAndMakeVisible(selector);
+
+    return selector;
+}
+
+
 void NewGui::timerCallback()
 {
     for (Knob* const knob : knobs) {
@@ -109,6 +144,10 @@ void NewGui::timerCallback()
 
     for (WaveformSelector* const wave : waves) {
         wave->refresh();
+    }
+
+    for (Selector* const selector : selectors) {
+        selector->refresh();
     }
 }
 
@@ -122,13 +161,11 @@ void NewGui::resized()
 
     int const gap = 10;
 
-    /* Right third: Modulators panel (placeholder for now). */
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
     area.removeFromRight(gap);
 
-    /* Left two thirds: Osc 1 -> Mix -> Osc 2. */
-    int const mix_width = 82;
+    int const mix_width = 84;
     int const osc_width = (area.getWidth() - mix_width - 2 * gap) / 2;
 
     osc1_bounds = area.removeFromLeft(osc_width);
@@ -137,16 +174,18 @@ void NewGui::resized()
     area.removeFromLeft(gap);
     osc2_bounds = area;
 
-    lay_out_osc(osc1_bounds, osc1_wave, osc1);
-    lay_out_mix(mix_bounds, mix);
-    lay_out_osc(osc2_bounds, osc2_wave, osc2);
+    lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_filter_type, osc1_filter);
+    lay_out_mix(mix_bounds, mode_selector, mix);
+    lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_filter_type, osc2_filter);
 }
 
 
 void NewGui::lay_out_osc(
         juce::Rectangle<int> panel,
         WaveformSelector* wave,
-        std::vector<Knob*>& knobs_
+        std::vector<Knob*>& main,
+        Selector* filter,
+        std::vector<Knob*>& filter_knobs
 ) {
     juce::Rectangle<int> inner = panel.reduced(12);
     inner.removeFromTop(20);   /* title */
@@ -155,23 +194,31 @@ void NewGui::lay_out_osc(
         wave->setBounds(inner.removeFromTop(40));
     }
 
-    inner.removeFromTop(6);
+    inner.removeFromTop(8);
 
-    /* Compact fixed-size cells, top-packed, leaving room below for the filter
-     * areas and per-type editor. */
     int const columns = 4;
     int const cell_w = inner.getWidth() / columns;
-    int const cell_h = 74;
+    int const cell_h = 72;
 
-    for (int i = 0; i != (int)knobs_.size(); ++i) {
-        int const row = i / columns;
-        int const col = i % columns;
-
-        knobs_[(size_t)i]->setBounds(
-            inner.getX() + col * cell_w,
-            inner.getY() + row * cell_h,
+    for (int i = 0; i != (int)main.size(); ++i) {
+        main[(size_t)i]->setBounds(
+            inner.getX() + (i % columns) * cell_w,
+            inner.getY() + (i / columns) * cell_h,
             cell_w,
             cell_h
+        );
+    }
+
+    int const main_rows = ((int)main.size() + columns - 1) / columns;
+    int const filter_y = inner.getY() + main_rows * cell_h + 6;
+
+    if (filter != nullptr) {
+        filter->setBounds(inner.getX() + 3, filter_y + 15, cell_w - 6, 40);
+    }
+
+    for (int i = 0; i != (int)filter_knobs.size(); ++i) {
+        filter_knobs[(size_t)i]->setBounds(
+            inner.getX() + (i + 1) * cell_w, filter_y, cell_w, cell_h
         );
     }
 }
@@ -179,20 +226,20 @@ void NewGui::lay_out_osc(
 
 void NewGui::lay_out_mix(
         juce::Rectangle<int> panel,
+        Selector* mode,
         std::vector<Knob*>& knobs_
 ) {
     juce::Rectangle<int> inner = panel.reduced(12);
     inner.removeFromTop(20);
 
-    int const n = (int)knobs_.size();
-
-    if (n < 1) {
-        return;
+    if (mode != nullptr) {
+        mode->setBounds(inner.removeFromTop(40));
+        inner.removeFromTop(8);
     }
 
-    int const cell_h = inner.getHeight() / n;
+    int const cell_h = 72;
 
-    for (int i = 0; i != n; ++i) {
+    for (int i = 0; i != (int)knobs_.size(); ++i) {
         knobs_[(size_t)i]->setBounds(
             inner.getX(), inner.getY() + i * cell_h, inner.getWidth(), cell_h
         );
@@ -238,7 +285,7 @@ void NewGui::paint(juce::Graphics& g)
     g.setFont(12.0f);
     g.drawText(
         "new GUI - work in progress",
-        header_bounds.reduced(16, 0),
+        header_bounds.withTrimmedRight(120).reduced(16, 0),
         juce::Justification::centredRight,
         false
     );

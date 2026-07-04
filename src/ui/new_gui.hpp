@@ -28,6 +28,7 @@
 
 #include "ui/knob.hpp"
 #include "ui/param_bridge.hpp"
+#include "ui/selector.hpp"
 #include "ui/waveform_selector.hpp"
 
 
@@ -36,10 +37,11 @@ namespace JS80P
 
 /**
  * \brief The new simplified editor surface (work in progress). Opaque top-level
- *        component: a header strip + `Osc 1 -> Mix -> Osc 2` columns. Each
- *        oscillator has a waveform icon selector over amp / tuning / type rows
- *        of vector knobs, all bound to the live Synth. The original GUI stays
- *        available behind an editor-owned toggle.
+ *        component: header + left two-thirds (Osc 1 / Mix / Osc 2) + right-third
+ *        Modulators panel. Each oscillator has a waveform selector over amp /
+ *        tuning / type knob rows and a filter area; the Mix column has the mode
+ *        selector over MIX/PM/FM/AM. All controls bound to the live Synth; the
+ *        original GUI stays available behind an editor-owned toggle.
  */
 class NewGui : public juce::Component, private juce::Timer
 {
@@ -55,18 +57,33 @@ class NewGui : public juce::Component, private juce::Timer
 
         Knob& add_knob(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
         WaveformSelector* add_wave(Synth::ParamId const id);
-        void lay_out_osc(juce::Rectangle<int> panel, WaveformSelector* wave, std::vector<Knob*>& knobs);
-        void lay_out_mix(juce::Rectangle<int> panel, std::vector<Knob*>& knobs);
+        Selector* add_selector(Synth::ParamId const id, juce::StringArray options, juce::String caption);
+
+        void lay_out_osc(
+            juce::Rectangle<int> panel,
+            WaveformSelector* wave,
+            std::vector<Knob*>& main,
+            Selector* filter,
+            std::vector<Knob*>& filter_knobs
+        );
+        void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
 
         ParamBridge bridge;
         juce::OwnedArray<Knob> knobs;
         juce::OwnedArray<WaveformSelector> waves;
+        juce::OwnedArray<Selector> selectors;
 
         WaveformSelector* osc1_wave;
         WaveformSelector* osc2_wave;
+        Selector* osc1_filter_type;
+        Selector* osc2_filter_type;
+        Selector* mode_selector;
+
         std::vector<Knob*> osc1;
         std::vector<Knob*> osc2;
+        std::vector<Knob*> osc1_filter;
+        std::vector<Knob*> osc2_filter;
         std::vector<Knob*> mix;
 
         juce::Rectangle<int> header_bounds;

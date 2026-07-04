@@ -53,6 +53,7 @@ target_sources(JS80P PRIVATE
   src/gui/juce.cpp
   src/ui/knob.cpp
   src/ui/waveform_selector.cpp
+  src/ui/selector.cpp
   src/ui/new_gui.cpp
   src/plugin/juce/PluginProcessor.cpp
   src/plugin/juce/PluginEditor.cpp)

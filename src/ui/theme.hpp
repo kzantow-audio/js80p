@@ -50,7 +50,7 @@ namespace Theme
     inline juce::Colour const MIDI        { 0xffe070a8 };
     inline juce::Colour const EXPR        { 0xffa888e4 };
 
-    inline constexpr float RADIUS = 12.0f;
+    inline constexpr float RADIUS = 2.0f;
 }
 
 }
