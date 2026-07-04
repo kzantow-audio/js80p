@@ -34,7 +34,7 @@ static juce::StringArray const MODES {
 
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
-    allocator(bridge),
+    manager(bridge),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
@@ -116,7 +116,7 @@ Knob& NewGui::add_knob(
         char const* const label
 ) {
     Knob* const knob = new Knob(bridge, id, label);
-    knob->set_allocator(&allocator);
+    knob->set_manager(&manager);
     knobs.add(knob);
     column.push_back(knob);
     addAndMakeVisible(knob);
@@ -155,7 +155,7 @@ FilterPanel* NewGui::add_filters(
         juce::String label_b
 ) {
     FilterPanel* const panel = new FilterPanel(
-        bridge, allocator, a, b, std::move(label_a), std::move(label_b)
+        bridge, manager, a, b, std::move(label_a), std::move(label_b)
     );
     filters.add(panel);
     addAndMakeVisible(panel);
@@ -166,6 +166,8 @@ FilterPanel* NewGui::add_filters(
 
 void NewGui::timerCallback()
 {
+    manager.rescan();
+
     for (Knob* const knob : knobs) {
         knob->refresh();
     }

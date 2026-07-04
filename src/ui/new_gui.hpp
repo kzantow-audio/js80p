@@ -28,7 +28,7 @@
 
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
-#include "ui/modulator_allocator.hpp"
+#include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 #include "ui/per_type_editor.hpp"
 #include "ui/selector.hpp"
@@ -78,7 +78,7 @@ class NewGui : public juce::Component, private juce::Timer
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
 
         ParamBridge bridge;
-        ModulatorAllocator allocator;
+        ModulationManager manager;
         std::vector<juce::String> mod_lines;
         juce::OwnedArray<Knob> knobs;
         juce::OwnedArray<WaveformSelector> waves;

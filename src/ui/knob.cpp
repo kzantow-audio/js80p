@@ -17,6 +17,9 @@
  */
 
 #include <cmath>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "ui/knob.hpp"
 
@@ -26,6 +29,15 @@
 namespace JS80P
 {
 
+static constexpr float START_ANGLE = juce::MathConstants<float>::pi * 1.2f;
+static constexpr float END_ANGLE = juce::MathConstants<float>::pi * 2.8f;
+
+static float angle_of(double const r)
+{
+    return START_ANGLE + (float)r * (END_ANGLE - START_ANGLE);
+}
+
+
 Knob::Knob(
         ParamBridge& bridge,
         Synth::ParamId const param_id,
@@ -33,54 +45,26 @@ Knob::Knob(
 ) : bridge(bridge),
     param_id(param_id),
     label(label),
-    allocator(nullptr),
+    manager(nullptr),
     ratio(bridge.get_ratio(param_id)),
     skew(1.0),
     drag_start_visual(0.0),
     dragging(false),
+    dragging_depth(false),
+    drag_start_depth(0.0),
     semitone_snap(false),
     assigned(false),
     mod_type(Modulation::LFO),
-    mod_index(0),
-    depth(DEFAULT_DEPTH),
-    drag_start_depth(0.0)
+    mod_slot(0),
+    base(0.0),
+    depth(0.5)
 {
     setWantsKeyboardFocus(false);
 }
 
 
-void Knob::set_allocator(ModulatorAllocator* const a)
-{
-    allocator = a;
-}
-
-
-void Knob::set_semitone_snap(bool const on)
-{
-    semitone_snap = on;
-}
-
-
-double Knob::ratio_for_display(double const target) const
-{
-    double const at_min = bridge.display_value(param_id, 0.0);
-    double const at_max = bridge.display_value(param_id, 1.0);
-    bool const increasing = at_max >= at_min;
-    double lo = 0.0;
-    double hi = 1.0;
-
-    for (int i = 0; i != 40; ++i) {
-        double const mid = 0.5 * (lo + hi);
-
-        if ((bridge.display_value(param_id, mid) < target) == increasing) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-
-    return 0.5 * (lo + hi);
-}
+void Knob::set_manager(ModulationManager* const m) { manager = m; }
+void Knob::set_semitone_snap(bool const on) { semitone_snap = on; }
 
 
 double Knob::ratio_to_visual(double const r) const
@@ -95,32 +79,34 @@ double Knob::visual_to_ratio(double const v) const
 }
 
 
-void Knob::set_center_value(double const display_value)
+double Knob::ratio_for_display(double const target) const
 {
     double const at_min = bridge.display_value(param_id, 0.0);
     double const at_max = bridge.display_value(param_id, 1.0);
-    double const lo_value = juce::jmin(at_min, at_max);
-    double const hi_value = juce::jmax(at_min, at_max);
-
-    if (display_value <= lo_value || display_value >= hi_value) {
-        return;
-    }
-
     bool const increasing = at_max >= at_min;
     double lo = 0.0;
     double hi = 1.0;
 
     for (int i = 0; i != 40; ++i) {
         double const mid = 0.5 * (lo + hi);
-
-        if ((bridge.display_value(param_id, mid) < display_value) == increasing) {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
+        if ((bridge.display_value(param_id, mid) < target) == increasing) lo = mid;
+        else hi = mid;
     }
 
-    double const center_ratio = 0.5 * (lo + hi);
+    return 0.5 * (lo + hi);
+}
+
+
+void Knob::set_center_value(double const display_value)
+{
+    double const at_min = bridge.display_value(param_id, 0.0);
+    double const at_max = bridge.display_value(param_id, 1.0);
+
+    if (display_value <= juce::jmin(at_min, at_max) || display_value >= juce::jmax(at_min, at_max)) {
+        return;
+    }
+
+    double const center_ratio = ratio_for_display(display_value);
 
     if (center_ratio > 1.0e-4 && center_ratio < 1.0 - 1.0e-4) {
         skew = juce::jlimit(0.1, 10.0, std::log(center_ratio) / std::log(0.5));
@@ -131,15 +117,17 @@ void Knob::set_center_value(double const display_value)
 void Knob::update_assignment()
 {
     Modulation::Type type;
-    int index;
-    bool const now = Modulation::decode(bridge.controller(param_id), type, index);
+    int slot;
+    bool const now = manager != nullptr
+        && Modulation::decode(bridge.controller(param_id), type, slot);
 
-    if (now != assigned || (now && (type != mod_type || index != mod_index))) {
+    if (now != assigned || (now && (type != mod_type || slot != mod_slot))) {
         assigned = now;
 
         if (now) {
             mod_type = type;
-            mod_index = index;
+            mod_slot = slot;
+            read_base_depth();
         }
 
         repaint();
@@ -147,42 +135,44 @@ void Knob::update_assignment()
 }
 
 
-double Knob::read_depth() const
+void Knob::read_base_depth()
 {
-    switch (mod_type) {
-        case Modulation::LFO:
-            return juce::jlimit(0.0, 1.0,
-                bridge.get_ratio(Modulation::lfo_max(mod_index))
-                - bridge.get_ratio(Modulation::lfo_min(mod_index)));
-        case Modulation::MACRO:
-            return juce::jlimit(0.0, 1.0,
-                bridge.get_ratio(Modulation::macro_max(mod_index))
-                - bridge.get_ratio(Modulation::macro_min(mod_index)));
-        default:
-            return juce::jlimit(0.0, 1.0, bridge.get_ratio(Modulation::env_peak(mod_index)));
-    }
+    Synth::ParamId const base_param =
+        mod_type == Modulation::ENVELOPE ? Modulation::env_ini(mod_slot)
+      : mod_type == Modulation::LFO ? Modulation::lfo_min(mod_slot)
+      : Modulation::macro_min(mod_slot);
+
+    base = bridge.get_ratio(base_param);
+    depth = bridge.get_ratio(Modulation::depth_param(mod_type, mod_slot)) - base;
 }
 
 
-void Knob::write_depth(double const d)
+void Knob::apply_base(double const b)
 {
-    double const c = juce::jlimit(0.0, 1.0, d);
+    base = juce::jlimit(0.0, 1.0, b);
 
-    switch (mod_type) {
-        case Modulation::LFO:
-            bridge.set_ratio(Modulation::lfo_min(mod_index), 0.5 - c * 0.5);
-            bridge.set_ratio(Modulation::lfo_max(mod_index), 0.5 + c * 0.5);
-            break;
-        case Modulation::MACRO:
-            bridge.set_ratio(Modulation::macro_min(mod_index), 0.5 - c * 0.5);
-            bridge.set_ratio(Modulation::macro_max(mod_index), 0.5 + c * 0.5);
-            break;
-        default:
-            bridge.set_ratio(Modulation::env_init(mod_index), 0.0);
-            bridge.set_ratio(Modulation::env_peak(mod_index), c);
-            bridge.set_ratio(Modulation::env_sus(mod_index), c);
-            break;
+    if (mod_type == Modulation::ENVELOPE) {
+        bridge.set_ratio(Modulation::env_ini(mod_slot), base);
+        bridge.set_ratio(Modulation::env_sus(mod_slot), base);
+        bridge.set_ratio(Modulation::env_fin(mod_slot), base);
+    } else if (mod_type == Modulation::LFO) {
+        bridge.set_ratio(Modulation::lfo_min(mod_slot), base);
+    } else {
+        bridge.set_ratio(Modulation::macro_min(mod_slot), base);
     }
+
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot),
+                     juce::jlimit(0.0, 1.0, base + depth));
+    repaint();
+}
+
+
+void Knob::apply_depth(double const d)
+{
+    depth = juce::jlimit(-1.0, 1.0, d);
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot),
+                     juce::jlimit(0.0, 1.0, base + depth));
+    repaint();
 }
 
 
@@ -195,10 +185,11 @@ void Knob::refresh()
     }
 
     if (assigned) {
-        double const live = read_depth();
+        double const b0 = base;
+        double const d0 = depth;
+        read_base_depth();
 
-        if (std::fabs(live - depth) > 1.0e-6) {
-            depth = live;
+        if (std::fabs(b0 - base) > 1.0e-6 || std::fabs(d0 - depth) > 1.0e-6) {
             repaint();
         }
     } else {
@@ -218,19 +209,35 @@ juce::String Knob::format_value() const
 
     if (semitone_snap) {
         double const semitones = value / 100.0;
-
         return std::fabs(semitones - std::round(semitones)) < 0.005
             ? juce::String((int)std::round(semitones))
             : juce::String(semitones, 2);
     }
 
-    int const decimals = (
-        bridge.is_discrete(param_id)
-            ? 0
-            : (std::fabs(value) >= 100.0 ? 0 : (std::fabs(value) >= 10.0 ? 1 : 2))
-    );
+    int const decimals = bridge.is_discrete(param_id)
+        ? 0
+        : (std::fabs(value) >= 100.0 ? 0 : (std::fabs(value) >= 10.0 ? 1 : 2));
 
     return juce::String(value, decimals);
+}
+
+
+juce::Rectangle<float> Knob::knob_circle() const
+{
+    juce::Rectangle<int> b = getLocalBounds().reduced(2);
+    b.removeFromTop(14);
+    b.removeFromBottom(14);
+
+    float const size = (float)juce::jmin(b.getWidth(), b.getHeight());
+    return b.toFloat().withSizeKeepingCentre(size, size).reduced(3.0f);
+}
+
+
+juce::Point<float> Knob::depth_center() const
+{
+    juce::Rectangle<float> const kb = knob_circle();
+    float const r = kb.getWidth() * 0.5f;
+    return kb.getCentre().translated(r * 0.72f, -r * 0.72f);
 }
 
 
@@ -244,33 +251,25 @@ void Knob::paint(juce::Graphics& g)
     g.setFont(11.0f);
     g.drawText(label, label_area, juce::Justification::centred, false);
 
-    float const size = (float)juce::jmin(b.getWidth(), b.getHeight());
-    juce::Rectangle<float> const kb =
-        b.toFloat().withSizeKeepingCentre(size, size).reduced(3.0f);
-
+    juce::Rectangle<float> const kb = knob_circle();
     float const cx = kb.getCentreX();
     float const cy = kb.getCentreY();
     float const r = kb.getWidth() * 0.5f;
 
-    float const start_angle = juce::MathConstants<float>::pi * 1.2f;
-    float const end_angle = juce::MathConstants<float>::pi * 2.8f;
-
-    juce::PathStrokeType const stroke(
-        3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded
-    );
+    juce::PathStrokeType const stroke(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
 
     juce::Path track;
-    track.addCentredArc(cx, cy, r, r, 0.0f, start_angle, end_angle, true);
+    track.addCentredArc(cx, cy, r, r, 0.0f, START_ANGLE, END_ANGLE, true);
     g.setColour(Theme::TRACK);
     g.strokePath(track, stroke);
 
     juce::Colour const active = assigned ? Modulation::colour(mod_type) : Theme::ACCENT;
-    float const visual = (float)(assigned ? depth : ratio_to_visual(ratio));
-    float const value_angle = start_angle + visual * (end_angle - start_angle);
+    double const position = ratio_to_visual(assigned ? base : ratio);
+    float const pos_angle = angle_of(position);
 
     juce::Path value_arc;
-    value_arc.addCentredArc(cx, cy, r, r, 0.0f, start_angle, value_angle, true);
-    g.setColour(active);
+    value_arc.addCentredArc(cx, cy, r, r, 0.0f, START_ANGLE, pos_angle, true);
+    g.setColour(assigned ? active.withAlpha(0.55f) : active);
     g.strokePath(value_arc, stroke);
 
     float const body = r - 4.0f;
@@ -279,38 +278,48 @@ void Knob::paint(juce::Graphics& g)
     g.setColour(assigned ? active : Theme::EDGE);
     g.drawEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f, assigned ? 1.5f : 1.0f);
 
-    float const px = cx + std::sin(value_angle) * body;
-    float const py = cy - std::cos(value_angle) * body;
     g.setColour(active);
-    g.drawLine(cx, cy, px, py, 2.0f);
+    g.drawLine(cx, cy + 0.0f,
+               cx + std::sin(pos_angle) * body, cy - std::cos(pos_angle) * body, 2.0f);
 
-    if (assigned) {
-        /* Type badge over the knob. */
-        juce::String const badge = juce::String(Modulation::prefix(mod_type)) + juce::String(mod_index);
-        g.setColour(active);
-        g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
-        g.drawText(badge, kb.toNearestInt(), juce::Justification::centred, false);
-
-        /* Secondary display: the modulation range as a bar. */
-        float lo = 0.0f;
-        float hi = (float)depth;
-
-        if (mod_type != Modulation::ENVELOPE) {
-            lo = 0.5f - (float)depth * 0.5f;
-            hi = 0.5f + (float)depth * 0.5f;
-        }
-
-        juce::Rectangle<float> const bar = value_area.toFloat().reduced(2.0f, 3.0f);
-        g.setColour(Theme::INSET);
-        g.fillRect(bar);
-        g.setColour(active.withAlpha(0.85f));
-        g.fillRect(bar.getX() + lo * bar.getWidth(), bar.getY(),
-                   (hi - lo) * bar.getWidth(), bar.getHeight());
-    } else {
+    if (!assigned) {
         g.setColour(Theme::TEXT);
         g.setFont(11.0f);
         g.drawText(format_value(), value_area, juce::Justification::centred, false);
+        return;
     }
+
+    /* Outer reach ring: base -> base+depth (shows sign, direction, target). */
+    float const target = (float)ratio_to_visual(juce::jlimit(0.0, 1.0, base + depth));
+    float const target_angle = angle_of(target);
+    float const rr = r + 3.0f;
+    float const a0 = juce::jmin(pos_angle, target_angle);
+    float const a1 = juce::jmax(pos_angle, target_angle);
+
+    juce::Path reach;
+    reach.addCentredArc(cx, cy, rr, rr, 0.0f, a0, a1, true);
+    g.setColour(active);
+    g.strokePath(reach, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    float const tx = cx + std::sin(target_angle) * rr;
+    float const ty = cy - std::cos(target_angle) * rr;
+    g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
+
+    /* Top-right depth control: fill proportional to |depth|. */
+    juce::Point<float> const dc = depth_center();
+    g.setColour(Theme::INSET);
+    g.fillEllipse(dc.x - DEPTH_R, dc.y - DEPTH_R, DEPTH_R * 2.0f, DEPTH_R * 2.0f);
+    float const fr = DEPTH_R * (float)juce::jmin(1.0, std::fabs(depth));
+    g.setColour(active);
+    g.fillEllipse(dc.x - fr, dc.y - fr, fr * 2.0f, fr * 2.0f);
+    g.setColour(active);
+    g.drawEllipse(dc.x - DEPTH_R, dc.y - DEPTH_R, DEPTH_R * 2.0f, DEPTH_R * 2.0f, 1.0f);
+
+    juce::String const badge =
+        juce::String(Modulation::prefix(mod_type)) + juce::String(mod_slot);
+    g.setColour(active);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
+    g.drawText(badge, value_area, juce::Justification::centred, false);
 }
 
 
@@ -328,109 +337,92 @@ void Knob::open_assign_menu()
 
     if (assigned) {
         menu.addSectionHeader(
-            juce::String(mod_type == Modulation::ENVELOPE ? "Envelope "
-                       : mod_type == Modulation::LFO ? "LFO " : "Macro ")
-            + juce::String(mod_index)
+            juce::String(Modulation::prefix(mod_type)) + juce::String(mod_slot)
         );
         menu.addItem(4, "Remove modulation");
         menu.addSeparator();
     }
 
-    menu.addItem(1, "Assign envelope  (" + juce::String(allocator->free_count(Modulation::ENVELOPE)) + " free)",
-                 allocator->free_count(Modulation::ENVELOPE) > 0);
-    menu.addItem(2, "Assign LFO  (" + juce::String(allocator->free_count(Modulation::LFO)) + " free)",
-                 allocator->free_count(Modulation::LFO) > 0);
-    menu.addItem(3, "Assign macro  (" + juce::String(allocator->free_count(Modulation::MACRO)) + " free)",
-                 allocator->free_count(Modulation::MACRO) > 0);
+    std::shared_ptr<std::vector<std::pair<Modulation::Type, int>>> const clones =
+        std::make_shared<std::vector<std::pair<Modulation::Type, int>>>();
+
+    for (ModulationManager::Group const& grp : manager->groups()) {
+        int const id = 100 + (int)clones->size();
+        clones->push_back({ grp.type, grp.rep });
+        menu.addItem(id,
+            "Copy " + juce::String(Modulation::prefix(grp.type)) + juce::String(grp.rep));
+    }
+
+    menu.addSeparator();
+    menu.addItem(1, "New envelope  (" + juce::String(manager->free_count(Modulation::ENVELOPE)) + ")",
+                 manager->free_count(Modulation::ENVELOPE) > 0);
+    menu.addItem(2, "New LFO  (" + juce::String(manager->free_count(Modulation::LFO)) + ")",
+                 manager->free_count(Modulation::LFO) > 0);
+    menu.addItem(3, "New macro  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
+                 manager->free_count(Modulation::MACRO) > 0);
 
     Knob* const self = this;
     menu.showMenuAsync(
         juce::PopupMenu::Options().withTargetComponent(this),
-        [self](int const result) {
-            switch (result) {
-                case 1: self->assign(Modulation::ENVELOPE); break;
-                case 2: self->assign(Modulation::LFO); break;
-                case 3: self->assign(Modulation::MACRO); break;
-                case 4: self->remove_assignment(); break;
-                default: break;
+        [self, clones](int const result) {
+            double const b = self->bridge.get_ratio(self->param_id);
+
+            if (result == 1) self->manager->assign(self->param_id, Modulation::ENVELOPE, b, 0);
+            else if (result == 2) self->manager->assign(self->param_id, Modulation::LFO, b, 0);
+            else if (result == 3) self->manager->assign(self->param_id, Modulation::MACRO, b, 0);
+            else if (result == 4) self->manager->unassign(self->param_id);
+            else if (result >= 100 && result - 100 < (int)clones->size()) {
+                std::pair<Modulation::Type, int> const& gp = (*clones)[result - 100];
+                self->manager->assign(self->param_id, gp.first, b, gp.second);
             }
+
+            self->update_assignment();
         }
     );
 }
 
 
-void Knob::assign(Modulation::Type const type)
-{
-    int const index = allocator->allocate(type);
-
-    if (index == 0) {
-        return;   /* pool exhausted */
-    }
-
-    mod_type = type;
-    mod_index = index;
-    assigned = true;
-    depth = DEFAULT_DEPTH;
-
-    bridge.assign_controller(param_id, Modulation::controller_id(type, index));
-    write_depth(depth);
-    repaint();
-}
-
-
-void Knob::remove_assignment()
-{
-    if (assigned) {
-        allocator->release(mod_type, mod_index);
-    }
-
-    assigned = false;
-    bridge.assign_controller(param_id, Synth::ControllerId::NONE);
-    repaint();
-}
-
-
 void Knob::mouseDown(juce::MouseEvent const& event)
 {
-    if (event.mods.isPopupMenu() && allocator != nullptr) {
+    if (event.mods.isPopupMenu() && manager != nullptr) {
         open_assign_menu();
         return;
     }
 
     dragging = true;
 
-    if (assigned) {
+    if (assigned && depth_center().getDistanceFrom(event.position) <= DEPTH_R + 2.0f) {
+        dragging_depth = true;
         drag_start_depth = depth;
     } else {
-        drag_start_visual = ratio_to_visual(ratio);
+        dragging_depth = false;
+        drag_start_visual = ratio_to_visual(assigned ? base : ratio);
     }
 }
 
 
 void Knob::mouseDrag(juce::MouseEvent const& event)
 {
-    double const sensitivity = (
-        event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0
-                                : DRAG_PIXELS_FULL_RANGE
-    );
+    double const sensitivity =
+        event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
 
-    if (assigned) {
-        depth = juce::jlimit(0.0, 1.0, drag_start_depth + delta);
-        write_depth(depth);
-        repaint();
+    if (dragging_depth) {
+        apply_depth(drag_start_depth + delta);
         return;
     }
 
     double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
 
+    if (assigned) {
+        apply_base(new_ratio);
+        return;
+    }
+
     if (semitone_snap && !event.mods.isCtrlDown()) {
-        /* Snap the *movement* to whole semitones, keeping any fine offset the
-         * drag started from (e.g. 3.5 -> 4.5, not 4.0). */
         double const start_cents = bridge.display_value(param_id, visual_to_ratio(drag_start_visual));
         double const raw_cents = bridge.display_value(param_id, new_ratio);
-        double const snapped = start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0;
-        new_ratio = ratio_for_display(snapped);
+        new_ratio = ratio_for_display(start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0);
     }
 
     commit(new_ratio);
@@ -440,15 +432,14 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
 void Knob::mouseUp(juce::MouseEvent const& /* event */)
 {
     dragging = false;
+    dragging_depth = false;
 }
 
 
 void Knob::mouseDoubleClick(juce::MouseEvent const& /* event */)
 {
     if (assigned) {
-        depth = DEFAULT_DEPTH;
-        write_depth(depth);
-        repaint();
+        apply_depth(0.5);
     } else {
         commit(bridge.get_default_ratio(param_id));
     }
@@ -460,17 +451,13 @@ void Knob::mouseWheelMove(
         juce::MouseWheelDetails const& wheel
 ) {
     if (assigned) {
-        depth = juce::jlimit(0.0, 1.0, depth + (double)wheel.deltaY * WHEEL_STEP);
-        write_depth(depth);
-        repaint();
+        apply_depth(depth + (double)wheel.deltaY * WHEEL_STEP);
         return;
     }
 
     if (semitone_snap && !event.mods.isCtrlDown()) {
-        /* Step by exactly one semitone, keeping any fine offset. */
         double const cents = bridge.display_value(param_id, ratio);
-        double const step = wheel.deltaY > 0.0f ? 100.0 : -100.0;
-        commit(ratio_for_display(cents + step));
+        commit(ratio_for_display(cents + (wheel.deltaY > 0.0f ? 100.0 : -100.0)));
         return;
     }
 

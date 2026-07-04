@@ -26,7 +26,7 @@
 
 #include "ui/filter_type_selector.hpp"
 #include "ui/knob.hpp"
-#include "ui/modulator_allocator.hpp"
+#include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -51,7 +51,7 @@ class FilterPanel : public juce::Component
 
         FilterPanel(
             ParamBridge& bridge,
-            ModulatorAllocator& allocator,
+            ModulationManager& manager,
             Spec const& a,
             Spec const& b,
             juce::String label_a,

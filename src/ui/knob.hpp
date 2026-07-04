@@ -25,7 +25,7 @@
 #include "synth.hpp"
 
 #include "ui/modulation.hpp"
-#include "ui/modulator_allocator.hpp"
+#include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -34,9 +34,10 @@ namespace JS80P
 
 /**
  * \brief A resolution-independent rotary control bound to one Synth parameter.
- *        Vector-drawn; drag / wheel / double-click-to-default. When a modulator
- *        is assigned it shows a colour-coded ring + badge and its drag edits the
- *        modulator's range (a secondary display) instead of a dead value.
+ *        When a modulator is assigned, the rotation sets the source's per-
+ *        destination base (envelope INI/SUS/FIN, or LFO/macro MIN); a small
+ *        filled circle at the top-right sets the signed range/depth (peak/max);
+ *        an outer ring shows where the modulation reaches. Right-click assigns.
  */
 class Knob : public juce::Component
 {
@@ -48,15 +49,9 @@ class Knob : public juce::Component
         );
 
         /** Make this knob a modulation destination (right-click to assign). */
-        void set_allocator(ModulatorAllocator* const allocator);
+        void set_manager(ModulationManager* const manager);
 
         void set_center_value(double const display_value);
-
-        /**
-         * \brief Pitch mode: the display value is in cents, so it is shown in
-         *        semitones (value / 100), and drag/wheel snap to whole
-         *        semitones unless Ctrl is held (continuous fine adjustment).
-         */
         void set_semitone_snap(bool const on);
 
         void refresh();
@@ -74,7 +69,7 @@ class Knob : public juce::Component
     private:
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
-        static constexpr double DEFAULT_DEPTH = 0.5;
+        static constexpr float DEPTH_R = 7.0f;
 
         juce::String format_value() const;
         void commit(double const new_ratio);
@@ -84,28 +79,32 @@ class Knob : public juce::Component
         double ratio_for_display(double const target) const;
 
         void update_assignment();
+        void read_base_depth();
+        void apply_base(double const b);
+        void apply_depth(double const d);
         void open_assign_menu();
-        void assign(Modulation::Type const type);
-        void remove_assignment();
-        double read_depth() const;
-        void write_depth(double const depth);
+
+        juce::Rectangle<float> knob_circle() const;
+        juce::Point<float> depth_center() const;
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
         juce::String const label;
-        ModulatorAllocator* allocator;
+        ModulationManager* manager;
 
         double ratio;
         double skew;
         double drag_start_visual;
         bool dragging;
+        bool dragging_depth;
+        double drag_start_depth;
         bool semitone_snap;
 
         bool assigned;
         Modulation::Type mod_type;
-        int mod_index;
-        double depth;
-        double drag_start_depth;
+        int mod_slot;
+        double base;
+        double depth;   /* signed: target = clamp(base + depth) */
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Knob)
 };

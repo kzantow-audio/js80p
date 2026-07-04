@@ -31,9 +31,10 @@ namespace JS80P
 {
 
 /**
- * \brief Helpers mapping the GUI's notion of a "modulator" (a pooled envelope /
- *        LFO / macro slot) to the engine's ControllerId and range parameters.
- *        The engine is untouched; this is pure bookkeeping over its ids.
+ * \brief Pure id/colour maps for the pooled modulators (envelope / LFO / macro).
+ *        See doc/z-gui.md 5-6. The engine is untouched; these just translate
+ *        between the GUI's (type, 1-based slot) and the engine's ParamId /
+ *        ControllerId. Strides are irregular, hence the explicit tables.
  */
 namespace Modulation
 {
@@ -41,31 +42,37 @@ namespace Modulation
 
     static constexpr int ENVELOPE_COUNT = 12;
     static constexpr int LFO_COUNT = 8;
-    static constexpr int MACRO_COUNT = 10;   /* macros 1-10 (7-param stride) */
+    /* Macros 1-8 are the top performance strip; 9-30 back auto-modulation. */
+    static constexpr int MACRO_POOL_FIRST = 9;
+    static constexpr int MACRO_POOL_LAST = 30;
 
-    /** ControllerId for a 1-based modulator slot, or NONE if out of range. */
-    inline Synth::ControllerId controller_id(Type const type, int const index)
+    inline int pool_first(Type const t) { return t == MACRO ? MACRO_POOL_FIRST : 1; }
+    inline int pool_last(Type const t)
     {
-        if (type == LFO && index >= 1 && index <= LFO_COUNT) {
-            return (Synth::ControllerId)((int)Synth::ControllerId::LFO_1 + index - 1);
-        }
-
-        if (type == ENVELOPE && index >= 1 && index <= ENVELOPE_COUNT) {
-            /* ENVELOPE_1..6 = 149..154, ENVELOPE_7..12 = 172..177. */
-            return index <= 6
-                ? (Synth::ControllerId)((int)Synth::ControllerId::ENVELOPE_1 + index - 1)
-                : (Synth::ControllerId)((int)Synth::ControllerId::ENVELOPE_7 + index - 7);
-        }
-
-        if (type == MACRO && index >= 1 && index <= MACRO_COUNT) {
-            return (Synth::ControllerId)((int)Synth::ControllerId::MACRO_1 + index - 1);
-        }
-
-        return Synth::ControllerId::NONE;
+        return t == ENVELOPE ? ENVELOPE_COUNT : (t == LFO ? LFO_COUNT : MACRO_POOL_LAST);
     }
 
-    /** The (type, 1-based index) a ControllerId denotes, or false if it's not a
-     *  pooled modulator (e.g. a raw MIDI CC). */
+    inline Synth::ParamId pid(int const v) { return (Synth::ParamId)v; }
+
+    /* ---- ControllerId <-> (type, 1-based slot) ---- */
+
+    inline Synth::ControllerId controller_id(Type const type, int const i)
+    {
+        if (type == LFO) {
+            return (Synth::ControllerId)((int)Synth::ControllerId::LFO_1 + i - 1);
+        }
+
+        if (type == ENVELOPE) {
+            return i <= 6
+                ? (Synth::ControllerId)((int)Synth::ControllerId::ENVELOPE_1 + i - 1)
+                : (Synth::ControllerId)((int)Synth::ControllerId::ENVELOPE_7 + i - 7);
+        }
+
+        if (i <= 10) return (Synth::ControllerId)((int)Synth::ControllerId::MACRO_1 + i - 1);
+        if (i <= 20) return (Synth::ControllerId)((int)Synth::ControllerId::MACRO_11 + i - 11);
+        return (Synth::ControllerId)((int)Synth::ControllerId::MACRO_21 + i - 21);
+    }
+
     inline bool decode(Synth::ControllerId const id, Type& type, int& index)
     {
         int const v = (int)id;
@@ -73,30 +80,73 @@ namespace Modulation
         if (v >= (int)Synth::ControllerId::LFO_1 && v <= (int)Synth::ControllerId::LFO_8) {
             type = LFO; index = v - (int)Synth::ControllerId::LFO_1 + 1; return true;
         }
-
         if (v >= (int)Synth::ControllerId::ENVELOPE_1 && v <= (int)Synth::ControllerId::ENVELOPE_6) {
             type = ENVELOPE; index = v - (int)Synth::ControllerId::ENVELOPE_1 + 1; return true;
         }
-
         if (v >= (int)Synth::ControllerId::ENVELOPE_7 && v <= (int)Synth::ControllerId::ENVELOPE_12) {
             type = ENVELOPE; index = v - (int)Synth::ControllerId::ENVELOPE_7 + 7; return true;
         }
-
         if (v >= (int)Synth::ControllerId::MACRO_1 && v <= (int)Synth::ControllerId::MACRO_10) {
             type = MACRO; index = v - (int)Synth::ControllerId::MACRO_1 + 1; return true;
         }
-
+        if (v >= (int)Synth::ControllerId::MACRO_11 && v <= (int)Synth::ControllerId::MACRO_20) {
+            type = MACRO; index = v - (int)Synth::ControllerId::MACRO_11 + 11; return true;
+        }
+        if (v >= (int)Synth::ControllerId::MACRO_21 && v <= (int)Synth::ControllerId::MACRO_30) {
+            type = MACRO; index = v - (int)Synth::ControllerId::MACRO_21 + 21; return true;
+        }
         return false;
     }
 
-    /* Range parameters for a 1-based modulator slot (verified strides). */
-    inline Synth::ParamId lfo_min(int const i)  { return (Synth::ParamId)((int)Synth::ParamId::L1MIN + (i - 1) * 7); }
-    inline Synth::ParamId lfo_max(int const i)  { return (Synth::ParamId)((int)Synth::ParamId::L1MAX + (i - 1) * 7); }
-    inline Synth::ParamId macro_min(int const i){ return (Synth::ParamId)((int)Synth::ParamId::M1MIN + (i - 1) * 7); }
-    inline Synth::ParamId macro_max(int const i){ return (Synth::ParamId)((int)Synth::ParamId::M1MAX + (i - 1) * 7); }
-    inline Synth::ParamId env_init(int const i) { return (Synth::ParamId)((int)Synth::ParamId::N1INI + (i - 1) * 12); }
-    inline Synth::ParamId env_peak(int const i) { return (Synth::ParamId)((int)Synth::ParamId::N1PK  + (i - 1) * 12); }
-    inline Synth::ParamId env_sus(int const i)  { return (Synth::ParamId)((int)Synth::ParamId::N1SUS + (i - 1) * 12); }
+    /* ---- Envelope params (stride 12 from N1SCL = 339) ---- */
+
+    inline Synth::ParamId env_scl(int const i) { return pid(339 + 12 * (i - 1)); }
+    inline Synth::ParamId env_ini(int const i) { return pid(340 + 12 * (i - 1)); }
+    inline Synth::ParamId env_del(int const i) { return pid(341 + 12 * (i - 1)); }
+    inline Synth::ParamId env_atk(int const i) { return pid(342 + 12 * (i - 1)); }
+    inline Synth::ParamId env_pk (int const i) { return pid(343 + 12 * (i - 1)); }
+    inline Synth::ParamId env_hld(int const i) { return pid(344 + 12 * (i - 1)); }
+    inline Synth::ParamId env_dec(int const i) { return pid(345 + 12 * (i - 1)); }
+    inline Synth::ParamId env_sus(int const i) { return pid(346 + 12 * (i - 1)); }
+    inline Synth::ParamId env_rel(int const i) { return pid(347 + 12 * (i - 1)); }
+    inline Synth::ParamId env_fin(int const i) { return pid(348 + 12 * (i - 1)); }
+
+    /* ---- LFO params (irregular main block: only odd LFOs have PW) ---- */
+
+    inline int lfo_frq_base(int const i)
+    {
+        static int const base[9] = { 0, 484, 491, 499, 506, 514, 521, 529, 536 };
+        return base[i];
+    }
+
+    inline bool lfo_has_pw(int const i) { return (i % 2) == 1; }
+    inline Synth::ParamId lfo_pw (int const i) { return pid(lfo_frq_base(i) - 1); }
+    inline Synth::ParamId lfo_frq(int const i) { return pid(lfo_frq_base(i)); }
+    inline Synth::ParamId lfo_phs(int const i) { return pid(lfo_frq_base(i) + 1); }
+    inline Synth::ParamId lfo_min(int const i) { return pid(lfo_frq_base(i) + 2); }
+    inline Synth::ParamId lfo_max(int const i) { return pid(lfo_frq_base(i) + 3); }
+    inline Synth::ParamId lfo_amp(int const i) { return pid(lfo_frq_base(i) + 4); }
+    inline Synth::ParamId lfo_dst(int const i) { return pid(lfo_frq_base(i) + 5); }
+    inline Synth::ParamId lfo_rnd(int const i) { return pid(lfo_frq_base(i) + 6); }
+    inline Synth::ParamId lfo_wav(int const i) { return pid(555 + (i - 1)); }
+    inline Synth::ParamId lfo_log(int const i) { return pid(563 + (i - 1)); }
+    inline Synth::ParamId lfo_cen(int const i) { return pid(571 + (i - 1)); }
+    inline Synth::ParamId lfo_syn(int const i) { return pid(579 + (i - 1)); }
+
+    /* ---- Macro params (stride 7 from M1MID = 129) ---- */
+
+    inline Synth::ParamId macro_in (int const i) { return pid(130 + 7 * (i - 1)); }
+    inline Synth::ParamId macro_min(int const i) { return pid(131 + 7 * (i - 1)); }
+    inline Synth::ParamId macro_max(int const i) { return pid(132 + 7 * (i - 1)); }
+
+    /* ---- Per-destination range: base parameter(s) and depth (top) parameter.
+     *      base = env INI/SUS/FIN or LFO/macro MIN; depth target = env PK or
+     *      LFO/macro MAX. ---- */
+
+    inline Synth::ParamId depth_param(Type const type, int const i)
+    {
+        return type == ENVELOPE ? env_pk(i) : (type == LFO ? lfo_max(i) : macro_max(i));
+    }
 
     inline juce::Colour colour(Type const type)
     {

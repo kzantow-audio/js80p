@@ -51,6 +51,7 @@ target_sources(JS80P PRIVATE
   src/bank.cpp
   lib/mtsesp/Client/libMTSClient.cpp
   src/gui/juce.cpp
+  src/ui/modulation_manager.cpp
   src/ui/knob.cpp
   src/ui/waveform_selector.cpp
   src/ui/filter_type_selector.cpp
