@@ -43,6 +43,14 @@ class Knob : public juce::Component
             juce::String const& label
         );
 
+        /**
+         * \brief Warp the knob so \c display_value sits at the visual centre
+         *        (e.g. 1000 Hz mid-travel on a filter cutoff). The engine's
+         *        parameter scale is unchanged — only the knob's visual/drag
+         *        mapping is skewed.
+         */
+        void set_center_value(double const display_value);
+
         /** Pull the live value ratio from the engine unless being dragged. */
         void refresh();
 
@@ -63,12 +71,17 @@ class Knob : public juce::Component
         juce::String format_value() const;
         void commit(double const new_ratio);
 
+        /* Visual travel <-> parameter ratio: ratio = pow(visual, skew). */
+        double ratio_to_visual(double const r) const;
+        double visual_to_ratio(double const v) const;
+
         ParamBridge& bridge;
         Synth::ParamId const param_id;
         juce::String const label;
 
         double ratio;
-        double drag_start_ratio;
+        double skew;
+        double drag_start_visual;
         bool dragging;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Knob)

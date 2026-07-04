@@ -48,6 +48,8 @@ FilterPanel::FilterPanel(
         knobs.add(new Knob(bridge, specs[f].q,    "Q"));
         knobs.add(new Knob(bridge, specs[f].gain, "GAIN"));
 
+        knobs[f * 3]->set_center_value(1000.0);   /* 1 kHz at mid-travel */
+
         for (int k = 0; k != 3; ++k) {
             addChildComponent(knobs[f * 3 + k]);
         }

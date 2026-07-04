@@ -34,10 +34,64 @@ Knob::Knob(
     param_id(param_id),
     label(label),
     ratio(bridge.get_ratio(param_id)),
-    drag_start_ratio(0.0),
+    skew(1.0),
+    drag_start_visual(0.0),
     dragging(false)
 {
     setWantsKeyboardFocus(false);
+}
+
+
+double Knob::ratio_to_visual(double const r) const
+{
+    if (skew == 1.0 || r <= 0.0) {
+        return r;
+    }
+
+    return std::pow(r, 1.0 / skew);
+}
+
+
+double Knob::visual_to_ratio(double const v) const
+{
+    if (skew == 1.0 || v <= 0.0) {
+        return v;
+    }
+
+    return std::pow(v, skew);
+}
+
+
+void Knob::set_center_value(double const display_value)
+{
+    double const at_min = bridge.display_value(param_id, 0.0);
+    double const at_max = bridge.display_value(param_id, 1.0);
+    double const lo_value = juce::jmin(at_min, at_max);
+    double const hi_value = juce::jmax(at_min, at_max);
+
+    if (display_value <= lo_value || display_value >= hi_value) {
+        return;   /* out of range: keep the linear mapping */
+    }
+
+    bool const increasing = at_max >= at_min;
+    double lo = 0.0;
+    double hi = 1.0;
+
+    for (int i = 0; i != 40; ++i) {
+        double const mid = 0.5 * (lo + hi);
+
+        if ((bridge.display_value(param_id, mid) < display_value) == increasing) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    double const center_ratio = 0.5 * (lo + hi);
+
+    if (center_ratio > 1.0e-4 && center_ratio < 1.0 - 1.0e-4) {
+        skew = juce::jlimit(0.1, 10.0, std::log(center_ratio) / std::log(0.5));
+    }
 }
 
 
@@ -89,7 +143,8 @@ void Knob::paint(juce::Graphics& g)
 
     float const start_angle = juce::MathConstants<float>::pi * 1.2f;
     float const end_angle = juce::MathConstants<float>::pi * 2.8f;
-    float const value_angle = start_angle + (float)ratio * (end_angle - start_angle);
+    float const visual = (float)ratio_to_visual(ratio);
+    float const value_angle = start_angle + visual * (end_angle - start_angle);
 
     juce::PathStrokeType const stroke(
         3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded
@@ -139,7 +194,7 @@ void Knob::commit(double const new_ratio)
 void Knob::mouseDown(juce::MouseEvent const& /* event */)
 {
     dragging = true;
-    drag_start_ratio = ratio;
+    drag_start_visual = ratio_to_visual(ratio);
 }
 
 
@@ -151,7 +206,7 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
     );
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
 
-    commit(drag_start_ratio + delta);
+    commit(visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta)));
 }
 
 
@@ -171,7 +226,8 @@ void Knob::mouseWheelMove(
         juce::MouseEvent const& /* event */,
         juce::MouseWheelDetails const& wheel
 ) {
-    commit(ratio + (double)wheel.deltaY * WHEEL_STEP);
+    double const v = ratio_to_visual(ratio) + (double)wheel.deltaY * WHEEL_STEP;
+    commit(visual_to_ratio(juce::jlimit(0.0, 1.0, v)));
 }
 
 }
