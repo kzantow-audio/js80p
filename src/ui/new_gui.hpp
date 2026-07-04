@@ -87,6 +87,8 @@ class NewGui : public juce::Component, private juce::Timer
         ParamBridge bridge;
         ModulationManager manager;
         MacroStrip macro_strip;
+        juce::Viewport mod_viewport;
+        juce::Component mod_content;
         juce::OwnedArray<ModulatorCard> cards;
         std::string card_sig;
         juce::OwnedArray<Knob> knobs;

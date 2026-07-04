@@ -35,29 +35,26 @@ ModulatorCard::ModulatorCard(
     setWantsKeyboardFocus(false);
 
     if (type == Modulation::ENVELOPE) {
-        knobs.add(new Knob(bridge, Modulation::env_atk(rep), "A"));
-        knobs.add(new Knob(bridge, Modulation::env_hld(rep), "H"));
-        knobs.add(new Knob(bridge, Modulation::env_dec(rep), "D"));
-        knobs.add(new Knob(bridge, Modulation::env_rel(rep), "R"));
+        sliders.add(new VSlider(bridge, Modulation::env_atk(rep), "A"));
+        sliders.add(new VSlider(bridge, Modulation::env_hld(rep), "H"));
+        sliders.add(new VSlider(bridge, Modulation::env_dec(rep), "D"));
+        sliders.add(new VSlider(bridge, Modulation::env_rel(rep), "R"));
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         addAndMakeVisible(*wave);
-        knobs.add(new Knob(bridge, Modulation::lfo_frq(rep), "RATE"));
-        knobs.add(new Knob(bridge, Modulation::lfo_phs(rep), "PHS"));
-    } else {
-        knobs.add(new Knob(bridge, Modulation::macro_min(rep), "MIN"));
-        knobs.add(new Knob(bridge, Modulation::macro_max(rep), "MAX"));
+        sliders.add(new VSlider(bridge, Modulation::lfo_frq(rep), "RATE"));
+        sliders.add(new VSlider(bridge, Modulation::lfo_phs(rep), "PHS"));
     }
 
-    for (Knob* const knob : knobs) {
-        addAndMakeVisible(knob);
+    for (VSlider* const s : sliders) {
+        addAndMakeVisible(s);
     }
 }
 
 
 int ModulatorCard::preferred_height() const
 {
-    return type == Modulation::LFO ? 150 : 96;
+    return type == Modulation::LFO ? 118 : 78;
 }
 
 
@@ -91,8 +88,8 @@ void ModulatorCard::propagate()
 
 void ModulatorCard::refresh()
 {
-    for (Knob* const knob : knobs) {
-        knob->refresh();
+    for (VSlider* const s : sliders) {
+        s->refresh();
     }
 
     if (wave != nullptr) {
@@ -103,22 +100,20 @@ void ModulatorCard::refresh()
 
 void ModulatorCard::resized()
 {
-    juce::Rectangle<int> b = getLocalBounds().reduced(8);
-    b.removeFromTop(18);   /* title */
-    b.removeFromTop(14);   /* destination badges */
+    juce::Rectangle<int> b = getLocalBounds().reduced(6);
+    b.removeFromTop(16);   /* one-line header */
 
     if (wave != nullptr) {
-        /* 2 rows at the oscillator button height (20px each). */
         wave->setBounds(b.removeFromTop(40));
-        b.removeFromTop(6);
+        b.removeFromTop(4);
     }
 
-    int const n = (int)knobs.size();
+    int const n = sliders.size();
 
     if (n > 0) {
         int const cell = b.getWidth() / n;
         for (int i = 0; i != n; ++i) {
-            knobs[i]->setBounds(b.getX() + i * cell, b.getY(), cell, b.getHeight());
+            sliders[i]->setBounds(b.getX() + i * cell, b.getY(), cell - 3, b.getHeight());
         }
     }
 }
@@ -132,21 +127,38 @@ void ModulatorCard::paint(juce::Graphics& g)
     g.setColour(Modulation::colour(type).withAlpha(0.5f));
     g.drawRoundedRectangle(box, 4.0f, 1.0f);
 
-    juce::String const title =
-        juce::String(Modulation::prefix(type)) + juce::String(rep)
-        + (type == Modulation::ENVELOPE ? "  Envelope" : type == Modulation::LFO ? "  LFO" : "  Macro");
-    g.setColour(Modulation::colour(type));
-    g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
-    g.drawText(title, 10, 6, getWidth() - 20, 16, juce::Justification::centredLeft, false);
+    /* One-line header: "<rep> (+<others>) Target1 Target2 ..." */
+    juce::String slots = juce::String(Modulation::prefix(type)) + juce::String(rep);
 
-    /* Destination badges. */
-    g.setColour(Theme::TEXT_DIM);
-    g.setFont(10.0f);
+    if (members.size() > 1) {
+        slots += " (+";
+        bool first = true;
+        for (int m : members) {
+            if (m == rep) {
+                continue;
+            }
+            slots += (first ? "" : " ") + juce::String(m);
+            first = false;
+        }
+        slots += ")";
+    }
+
+    juce::Font const hf(juce::FontOptions().withHeight(12.0f).withStyle("Bold"));
+    g.setFont(hf);
+    g.setColour(Modulation::colour(type));
+    g.drawText(slots, 8, 3, getWidth() - 16, 14, juce::Justification::centredLeft, false);
+
+    int const slots_w = (int)juce::GlyphArrangement::getStringWidth(hf, slots) + 2;
+
     juce::String dests;
     for (Synth::ParamId const d : destinations) {
         dests += juce::String(bridge.param_name(d).c_str()) + " ";
     }
-    g.drawText(dests.trim(), 10, 22, getWidth() - 20, 12, juce::Justification::centredLeft, true);
+
+    g.setColour(Theme::TEXT_DIM);
+    g.setFont(11.0f);
+    g.drawText(dests.trim(), 8 + slots_w + 8, 3, getWidth() - 24 - slots_w, 14,
+               juce::Justification::centredLeft, true);
 }
 
 }

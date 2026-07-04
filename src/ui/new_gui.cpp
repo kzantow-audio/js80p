@@ -48,6 +48,10 @@ NewGui::NewGui(Synth& synth)
 
     addAndMakeVisible(macro_strip);
 
+    mod_viewport.setViewedComponent(&mod_content, false);
+    mod_viewport.setScrollBarsShown(true, false);
+    addAndMakeVisible(mod_viewport);
+
     /* Osc 1 (modulator). */
     osc1_wave = add_wave(Synth::ParamId::MWFM);
     add_knob(osc1, Synth::ParamId::MAMP, "AMP");
@@ -227,7 +231,7 @@ void NewGui::rebuild_cards()
 
         ModulatorCard* const card = new ModulatorCard(bridge, g);
         cards.add(card);
-        addAndMakeVisible(card);
+        mod_content.addAndMakeVisible(card);
     }
 
     layout_cards();
@@ -236,13 +240,16 @@ void NewGui::rebuild_cards()
 
 void NewGui::layout_cards()
 {
-    int y = mod_bounds.getY() + 30;
+    int const w = mod_viewport.getWidth() - mod_viewport.getScrollBarThickness();
+    int y = 4;
 
     for (ModulatorCard* const card : cards) {
         int const h = card->preferred_height();
-        card->setBounds(mod_bounds.getX() + 8, y, mod_bounds.getWidth() - 16, h);
+        card->setBounds(6, y, juce::jmax(0, w - 12), h);
         y += h + 6;
     }
+
+    mod_content.setSize(juce::jmax(0, w), y + 2);
 }
 
 
@@ -285,6 +292,12 @@ void NewGui::resized()
     lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
     lay_out_mix(mix_bounds, mode_selector, mix);
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
+
+    juce::Rectangle<int> mv = mod_bounds;
+    mv.removeFromTop(28);          /* panel title */
+    mv = mv.reduced(4, 0);
+    mv.removeFromBottom(6);
+    mod_viewport.setBounds(mv);
 
     layout_cards();
 }

@@ -27,10 +27,10 @@
 #include "js80p.hpp"
 #include "synth.hpp"
 
-#include "ui/knob.hpp"
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
+#include "ui/vslider.hpp"
 #include "ui/waveform_selector.hpp"
 
 
@@ -65,7 +65,7 @@ class ModulatorCard : public juce::Component
         std::vector<int> members;
         std::vector<Synth::ParamId> destinations;
 
-        juce::OwnedArray<Knob> knobs;
+        juce::OwnedArray<VSlider> sliders;
         std::unique_ptr<WaveformSelector> wave;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorCard)
