@@ -58,6 +58,7 @@ target_sources(JS80P PRIVATE
   src/ui/selector.cpp
   src/ui/filter_panel.cpp
   src/ui/per_type_editor.cpp
+  src/ui/modulator_card.cpp
   src/ui/new_gui.cpp
   src/plugin/juce/PluginProcessor.cpp
   src/plugin/juce/PluginEditor.cpp)

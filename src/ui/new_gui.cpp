@@ -166,47 +166,76 @@ FilterPanel* NewGui::add_filters(
 
 void NewGui::timerCallback()
 {
+    /* Keep grouped duplicates in sync before regrouping, so a shape edit
+     * doesn't momentarily split a group. */
+    for (ModulatorCard* const card : cards) {
+        card->propagate();
+    }
+
     manager.rescan();
+
+    std::string sig;
+    for (ModulationManager::Group const& g : manager.groups()) {
+        if (g.type == Modulation::MACRO) {
+            continue;
+        }
+        sig += std::to_string((int)g.type) + ":" + std::to_string(g.rep) + ":"
+             + std::to_string(g.members.size()) + ":"
+             + std::to_string(g.destinations.size()) + ";";
+    }
+
+    if (sig != card_sig) {
+        card_sig = sig;
+        rebuild_cards();
+        repaint(mod_bounds);
+    }
 
     for (Knob* const knob : knobs) {
         knob->refresh();
     }
-
     for (WaveformSelector* const wave : waves) {
         wave->refresh();
     }
-
     for (Selector* const selector : selectors) {
         selector->refresh();
     }
-
     for (FilterPanel* const filter : filters) {
         filter->refresh();
     }
-
     for (PerTypeEditor* const editor : type_editors) {
         editor->refresh();
     }
+    for (ModulatorCard* const card : cards) {
+        card->refresh();
+    }
+}
 
-    /* Live overview of active source -> destination assignments. */
-    std::vector<juce::String> lines;
 
-    for (int pid = 0; pid != (int)Synth::ParamId::PARAM_ID_COUNT; ++pid) {
-        Modulation::Type type;
-        int index;
+void NewGui::rebuild_cards()
+{
+    cards.clear();
 
-        if (Modulation::decode(bridge.controller((Synth::ParamId)pid), type, index)) {
-            lines.push_back(
-                juce::String(Modulation::prefix(type)) + juce::String(index)
-                + "  ->  "
-                + juce::String(bridge.param_name((Synth::ParamId)pid).c_str())
-            );
+    for (ModulationManager::Group const& g : manager.groups()) {
+        if (g.type == Modulation::MACRO) {
+            continue;
         }
+
+        ModulatorCard* const card = new ModulatorCard(bridge, g);
+        cards.add(card);
+        addAndMakeVisible(card);
     }
 
-    if (lines != mod_lines) {
-        mod_lines = lines;
-        repaint(mod_bounds);
+    layout_cards();
+}
+
+
+void NewGui::layout_cards()
+{
+    int y = mod_bounds.getY() + 30;
+
+    for (ModulatorCard* const card : cards) {
+        card->setBounds(mod_bounds.getX() + 8, y, mod_bounds.getWidth() - 16, ModulatorCard::HEIGHT);
+        y += ModulatorCard::HEIGHT + 6;
     }
 }
 
@@ -249,6 +278,8 @@ void NewGui::resized()
     lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
     lay_out_mix(mix_bounds, mode_selector, mix);
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
+
+    layout_cards();
 }
 
 
@@ -361,29 +392,15 @@ void NewGui::paint(juce::Graphics& g)
 
     draw_panel(g, mod_bounds, "MODULATORS");
 
-    if (mod_lines.empty()) {
+    if (cards.isEmpty()) {
         g.setColour(Theme::TEXT_FAINT);
         g.setFont(11.0f);
         g.drawText(
-            "right-click any knob to assign a modulator",
+            "right-click any knob to assign an envelope or LFO",
             mod_bounds.reduced(16, 0),
             juce::Justification::centred,
             false
         );
-    } else {
-        g.setFont(12.0f);
-        int y = mod_bounds.getY() + 34;
-
-        for (juce::String const& line : mod_lines) {
-            if (y > mod_bounds.getBottom() - 16) {
-                break;
-            }
-
-            g.setColour(Theme::TEXT);
-            g.drawText(line, mod_bounds.getX() + 16, y, mod_bounds.getWidth() - 32, 18,
-                       juce::Justification::centredLeft, false);
-            y += 20;
-        }
     }
 }
 
