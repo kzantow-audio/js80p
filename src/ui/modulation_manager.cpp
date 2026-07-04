@@ -124,6 +124,12 @@ void ModulationManager::rescan()
         g.rep = g.members.empty() ? 0 : g.members.front();
         groups_.push_back(g);
     }
+
+    /* Stable order by type then representative slot, so a card keeps its place
+     * as its shape (and thus its shape-key bucket) changes. */
+    std::sort(groups_.begin(), groups_.end(), [](Group const& a, Group const& b) {
+        return a.type != b.type ? a.type < b.type : a.rep < b.rep;
+    });
 }
 
 
