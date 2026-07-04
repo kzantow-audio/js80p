@@ -19,6 +19,8 @@
 #ifndef JS80P__UI__VSLIDER_HPP
 #define JS80P__UI__VSLIDER_HPP
 
+#include <vector>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
@@ -31,14 +33,21 @@ namespace JS80P
 {
 
 /**
- * \brief A compact vertical slider bound to one parameter, with the name and
- *        value drawn to the left of the bar so the bar spans (almost) the full
- *        component height. Used for the modulator cards' A/H/D/R etc.
+ * \brief A compact vertical slider bound to one or more mirrored parameters.
+ *        Writes go to *every* target (so a grouped modulator's duplicate slots
+ *        stay in sync); the display reads the first. The name and value sit
+ *        top-left; an optional curvature picker (also multi-target, discrete)
+ *        sits underneath, left of the bar, and cycles on vertical drag.
  */
 class VSlider : public juce::Component
 {
     public:
-        VSlider(ParamBridge& bridge, Synth::ParamId const param_id, juce::String name);
+        VSlider(
+            ParamBridge& bridge,
+            std::vector<Synth::ParamId> value_targets,
+            juce::String name,
+            std::vector<Synth::ParamId> curve_targets = {}
+        );
 
         void refresh();
 
@@ -48,15 +57,22 @@ class VSlider : public juce::Component
         void mouseDoubleClick(juce::MouseEvent const& event) override;
 
     private:
-        static constexpr int BAR_W = 9;
+        static constexpr int BAR_W = 18;
 
         juce::Rectangle<int> bar() const;
-        void set_from_mouse(int const y);
+        juce::Rectangle<int> curve_rect() const;
+        void set_value_from_mouse(int const y);
+        void set_curve(int const index);
 
         ParamBridge& bridge;
-        Synth::ParamId const param_id;
+        std::vector<Synth::ParamId> value_targets;
+        std::vector<Synth::ParamId> curve_targets;
         juce::String const name;
         double ratio;
+        int curve_index;
+
+        bool dragging_curve;
+        int drag_start_curve;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VSlider)
 };

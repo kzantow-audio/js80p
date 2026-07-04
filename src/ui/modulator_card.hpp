@@ -20,6 +20,7 @@
 #define JS80P__UI__MODULATOR_CARD_HPP
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -64,6 +65,7 @@ class ModulatorCard : public juce::Component
         int rep;
         std::vector<int> members;
         std::vector<Synth::ParamId> destinations;
+        std::vector<std::pair<int, Synth::ParamId>> connections;
 
         juce::OwnedArray<VSlider> sliders;
         std::unique_ptr<WaveformSelector> wave;

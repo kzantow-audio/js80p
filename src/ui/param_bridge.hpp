@@ -93,6 +93,14 @@ class ParamBridge
             set_ratio(id, synth.discrete_param_value_to_ratio(id, (Byte)value));
         }
 
+        /** Default integer value of a discrete parameter. */
+        int get_discrete_default(Synth::ParamId const id) const noexcept
+        {
+            return (int)synth.byte_param_ratio_to_display_value(
+                id, synth.get_param_default_ratio(id)
+            );
+        }
+
         /** The parameter's displayed value (Hz / % / dB / ...) at \c ratio. */
         Number display_value(
                 Synth::ParamId const id, Number const ratio

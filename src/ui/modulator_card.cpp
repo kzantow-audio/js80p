@@ -30,20 +30,31 @@ ModulatorCard::ModulatorCard(
     type(group.type),
     rep(group.rep),
     members(group.members),
-    destinations(group.destinations)
+    destinations(group.destinations),
+    connections(group.connections)
 {
     setWantsKeyboardFocus(false);
 
+    /* All duplicate slots are edited together: each control writes to every
+     * member so the single combined display never drifts out of sync. */
+    auto build = [this](Synth::ParamId (*fn)(int)) {
+        std::vector<Synth::ParamId> v;
+        for (int m : members) {
+            v.push_back(fn(m));
+        }
+        return v;
+    };
+
     if (type == Modulation::ENVELOPE) {
-        sliders.add(new VSlider(bridge, Modulation::env_atk(rep), "A"));
-        sliders.add(new VSlider(bridge, Modulation::env_hld(rep), "H"));
-        sliders.add(new VSlider(bridge, Modulation::env_dec(rep), "D"));
-        sliders.add(new VSlider(bridge, Modulation::env_rel(rep), "R"));
+        sliders.add(new VSlider(bridge, build(Modulation::env_atk), "A", build(Modulation::env_ash)));
+        sliders.add(new VSlider(bridge, build(Modulation::env_hld), "H"));
+        sliders.add(new VSlider(bridge, build(Modulation::env_dec), "D", build(Modulation::env_dsh)));
+        sliders.add(new VSlider(bridge, build(Modulation::env_rel), "R", build(Modulation::env_rsh)));
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         addAndMakeVisible(*wave);
-        sliders.add(new VSlider(bridge, Modulation::lfo_frq(rep), "RATE"));
-        sliders.add(new VSlider(bridge, Modulation::lfo_phs(rep), "PHS"));
+        sliders.add(new VSlider(bridge, build(Modulation::lfo_frq), "RATE"));
+        sliders.add(new VSlider(bridge, build(Modulation::lfo_phs), "PHS"));
     }
 
     for (VSlider* const s : sliders) {
@@ -54,7 +65,7 @@ ModulatorCard::ModulatorCard(
 
 int ModulatorCard::preferred_height() const
 {
-    return type == Modulation::LFO ? 118 : 78;
+    return type == Modulation::LFO ? 118 : 104;
 }
 
 
@@ -127,38 +138,30 @@ void ModulatorCard::paint(juce::Graphics& g)
     g.setColour(Modulation::colour(type).withAlpha(0.5f));
     g.drawRoundedRectangle(box, 4.0f, 1.0f);
 
-    /* One-line header: "<rep> (+<others>) Target1 Target2 ..." */
-    juce::String slots = juce::String(Modulation::prefix(type)) + juce::String(rep);
+    /* One-line header: each slot next to its destination -
+     * "E1 <dest> E5 <dest> ...". */
+    juce::Font const sf(juce::FontOptions().withHeight(12.0f).withStyle("Bold"));
+    juce::Font const df(juce::FontOptions().withHeight(11.0f));
+    int const right = getWidth() - 8;
+    int x = 8;
 
-    if (members.size() > 1) {
-        slots += " (+";
-        bool first = true;
-        for (int m : members) {
-            if (m == rep) {
-                continue;
-            }
-            slots += (first ? "" : " ") + juce::String(m);
-            first = false;
+    for (std::pair<int, Synth::ParamId> const& c : connections) {
+        if (x >= right) {
+            break;
         }
-        slots += ")";
+
+        juce::String const slot = juce::String(Modulation::prefix(type)) + juce::String(c.first);
+        g.setFont(sf);
+        g.setColour(Modulation::colour(type));
+        g.drawText(slot, x, 3, right - x, 14, juce::Justification::centredLeft, false);
+        x += (int)juce::GlyphArrangement::getStringWidth(sf, slot) + 4;
+
+        juce::String const dest = juce::String(bridge.param_name(c.second).c_str());
+        g.setFont(df);
+        g.setColour(Theme::TEXT_DIM);
+        g.drawText(dest, x, 3, right - x, 14, juce::Justification::centredLeft, false);
+        x += (int)juce::GlyphArrangement::getStringWidth(df, dest) + 10;
     }
-
-    juce::Font const hf(juce::FontOptions().withHeight(12.0f).withStyle("Bold"));
-    g.setFont(hf);
-    g.setColour(Modulation::colour(type));
-    g.drawText(slots, 8, 3, getWidth() - 16, 14, juce::Justification::centredLeft, false);
-
-    int const slots_w = (int)juce::GlyphArrangement::getStringWidth(hf, slots) + 2;
-
-    juce::String dests;
-    for (Synth::ParamId const d : destinations) {
-        dests += juce::String(bridge.param_name(d).c_str()) + " ";
-    }
-
-    g.setColour(Theme::TEXT_DIM);
-    g.setFont(11.0f);
-    g.drawText(dests.trim(), 8 + slots_w + 8, 3, getWidth() - 24 - slots_w, 14,
-               juce::Justification::centredLeft, true);
 }
 
 }

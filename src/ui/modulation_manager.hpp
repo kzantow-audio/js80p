@@ -22,6 +22,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "js80p.hpp"
@@ -49,6 +50,8 @@ class ModulationManager
             int rep;                                  /* representative slot */
             std::vector<int> members;                 /* slots sharing the shape */
             std::vector<Synth::ParamId> destinations; /* params driven */
+            /* one (slot, destination) per connection, ordered by slot */
+            std::vector<std::pair<int, Synth::ParamId>> connections;
         };
 
         explicit ModulationManager(ParamBridge& bridge) noexcept

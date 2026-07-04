@@ -113,6 +113,10 @@ void ModulationManager::rescan()
         g.type = type;
         g.members.push_back(index);
         g.destinations.insert(g.destinations.end(), it->second.begin(), it->second.end());
+
+        for (Synth::ParamId const dest : it->second) {
+            g.connections.push_back({ index, dest });
+        }
     }
 
     groups_.clear();
@@ -177,6 +181,9 @@ void ModulationManager::copy_shape(
             bridge.set_ratio(Modulation::pid((int)Modulation::env_scl(to) + o),
                              bridge.get_ratio(Modulation::pid((int)Modulation::env_scl(from) + o)));
         }
+        bridge.set_ratio(Modulation::env_ash(to), bridge.get_ratio(Modulation::env_ash(from)));
+        bridge.set_ratio(Modulation::env_dsh(to), bridge.get_ratio(Modulation::env_dsh(from)));
+        bridge.set_ratio(Modulation::env_rsh(to), bridge.get_ratio(Modulation::env_rsh(from)));
     } else if (type == Modulation::LFO) {
         bridge.set_ratio(Modulation::lfo_wav(to), bridge.get_ratio(Modulation::lfo_wav(from)));
         bridge.set_ratio(Modulation::lfo_frq(to), bridge.get_ratio(Modulation::lfo_frq(from)));
