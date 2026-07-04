@@ -1,0 +1,95 @@
+/*
+ * This file is part of JS80P, a synthesizer plugin.
+ * Copyright (C) 2023, 2024, 2025, 2026  Attila M. Magyar
+ *
+ * JS80P is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * JS80P is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef JS80P__UI__PARAM_BRIDGE_HPP
+#define JS80P__UI__PARAM_BRIDGE_HPP
+
+#include <algorithm>
+
+#include "js80p.hpp"
+#include "synth.hpp"
+
+
+namespace JS80P
+{
+
+/**
+ * \brief Thin, GUI-toolkit-agnostic adapter over the existing Synth seam so new
+ *        widgets can read/write any of the 724 parameters by id. No Synth
+ *        changes: writes go through the lock-free message queue, reads use the
+ *        atomic getters.
+ */
+class ParamBridge
+{
+    public:
+        explicit ParamBridge(Synth& synth) noexcept
+            : synth(synth)
+        {
+        }
+
+        /** Current value ratio [0, 1] (reflects modulation / host / GUI). */
+        Number get_ratio(Synth::ParamId const id) const noexcept
+        {
+            return synth.get_param_ratio_atomic(id);
+        }
+
+        Number get_default_ratio(Synth::ParamId const id) const noexcept
+        {
+            return synth.get_param_default_ratio(id);
+        }
+
+        /** Queue a value change for the audio thread (ratio is clamped). */
+        void set_ratio(Synth::ParamId const id, Number const ratio) noexcept
+        {
+            synth.push_message(
+                Synth::MessageType::SET_PARAM,
+                id,
+                std::min(1.0, std::max(0.0, ratio)),
+                0
+            );
+        }
+
+        bool is_discrete(Synth::ParamId const id) const noexcept
+        {
+            return synth.is_discrete_param(id);
+        }
+
+        /** The parameter's displayed value (Hz / % / dB / ...) at \c ratio. */
+        Number display_value(
+                Synth::ParamId const id, Number const ratio
+        ) const noexcept {
+            if (synth.is_discrete_param(id)) {
+                return (Number)synth.byte_param_ratio_to_display_value(id, ratio);
+            }
+
+            return synth.float_param_ratio_to_display_value(id, ratio);
+        }
+
+        /** Assigned controller, or NONE when the knob drives the value itself. */
+        Synth::ControllerId controller(Synth::ParamId const id) const noexcept
+        {
+            return synth.get_param_controller_id_atomic(id);
+        }
+
+    private:
+        Synth& synth;
+};
+
+}
+
+#endif
