@@ -29,6 +29,7 @@
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
 #include "ui/param_bridge.hpp"
+#include "ui/per_type_editor.hpp"
 #include "ui/selector.hpp"
 #include "ui/waveform_selector.hpp"
 
@@ -69,7 +70,8 @@ class NewGui : public juce::Component, private juce::Timer
         void lay_out_osc(
             juce::Rectangle<int> panel,
             WaveformSelector* wave,
-            std::vector<Knob*>& main
+            std::vector<Knob*>& main,
+            PerTypeEditor* per_type
         );
         void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
@@ -79,12 +81,15 @@ class NewGui : public juce::Component, private juce::Timer
         juce::OwnedArray<WaveformSelector> waves;
         juce::OwnedArray<Selector> selectors;
         juce::OwnedArray<FilterPanel> filters;
+        juce::OwnedArray<PerTypeEditor> type_editors;
 
         WaveformSelector* osc1_wave;
         WaveformSelector* osc2_wave;
         Selector* mode_selector;
         FilterPanel* osc1_filters;
         FilterPanel* osc2_filters;
+        PerTypeEditor* osc1_type;
+        PerTypeEditor* osc2_type;
 
         std::vector<Knob*> osc1;
         std::vector<Knob*> osc2;

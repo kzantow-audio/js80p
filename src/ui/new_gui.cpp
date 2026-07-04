@@ -38,7 +38,9 @@ NewGui::NewGui(Synth& synth)
     osc2_wave(nullptr),
     mode_selector(nullptr),
     osc1_filters(nullptr),
-    osc2_filters(nullptr)
+    osc2_filters(nullptr),
+    osc1_type(nullptr),
+    osc2_type(nullptr)
 {
     setOpaque(true);
 
@@ -60,6 +62,11 @@ NewGui::NewGui(Synth& synth)
         { Synth::ParamId::MF2TYP, Synth::ParamId::MF2FRQ, Synth::ParamId::MF2Q, Synth::ParamId::MF2G },
         "1", "2"
     );
+    osc1_type = new PerTypeEditor(
+        bridge, Synth::ParamId::MWFM, Synth::ParamId::MPW, Synth::ParamId::MC1
+    );
+    type_editors.add(osc1_type);
+    addAndMakeVisible(osc1_type);
 
     /* Mix column. */
     mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
@@ -86,6 +93,11 @@ NewGui::NewGui(Synth& synth)
         { Synth::ParamId::CF2TYP, Synth::ParamId::CF2FRQ, Synth::ParamId::CF2Q, Synth::ParamId::CF2G },
         "3", "4"
     );
+    osc2_type = new PerTypeEditor(
+        bridge, Synth::ParamId::CWFM, Synth::ParamId::CPW, Synth::ParamId::CC1
+    );
+    type_editors.add(osc2_type);
+    addAndMakeVisible(osc2_type);
 
     startTimerHz(30);
 }
@@ -167,6 +179,10 @@ void NewGui::timerCallback()
     for (FilterPanel* const filter : filters) {
         filter->refresh();
     }
+
+    for (PerTypeEditor* const editor : type_editors) {
+        editor->refresh();
+    }
 }
 
 
@@ -205,16 +221,17 @@ void NewGui::resized()
     osc1_filters->setBounds(osc1_filter_bounds);
     osc2_filters->setBounds(osc2_filter_bounds);
 
-    lay_out_osc(osc1_bounds, osc1_wave, osc1);
+    lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
     lay_out_mix(mix_bounds, mode_selector, mix);
-    lay_out_osc(osc2_bounds, osc2_wave, osc2);
+    lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
 }
 
 
 void NewGui::lay_out_osc(
         juce::Rectangle<int> panel,
         WaveformSelector* wave,
-        std::vector<Knob*>& main
+        std::vector<Knob*>& main,
+        PerTypeEditor* per_type
 ) {
     juce::Rectangle<int> inner = panel.reduced(10);
     inner.removeFromTop(18);   /* title */
@@ -236,6 +253,13 @@ void NewGui::lay_out_osc(
             cell_w,
             cell_h
         );
+    }
+
+    int const main_rows = ((int)main.size() + columns - 1) / columns;
+    inner.removeFromTop(main_rows * cell_h + 6);
+
+    if (per_type != nullptr) {
+        per_type->setBounds(inner);
     }
 }
 
