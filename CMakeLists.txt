@@ -52,6 +52,7 @@ target_sources(JS80P PRIVATE
   lib/mtsesp/Client/libMTSClient.cpp
   src/gui/juce.cpp
   src/ui/knob.cpp
+  src/ui/waveform_selector.cpp
   src/ui/new_gui.cpp
   src/plugin/juce/PluginProcessor.cpp
   src/plugin/juce/PluginEditor.cpp)

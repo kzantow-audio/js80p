@@ -25,32 +25,47 @@ namespace JS80P
 {
 
 NewGui::NewGui(Synth& synth)
-    : bridge(synth)
+    : bridge(synth),
+    osc1_wave(nullptr),
+    osc2_wave(nullptr)
 {
     setOpaque(true);
 
-    add(osc1, Synth::ParamId::MAMP, "AMP");
-    add(osc1, Synth::ParamId::MVS,  "VEL");
-    add(osc1, Synth::ParamId::MWID, "WID");
-    add(osc1, Synth::ParamId::MPAN, "PAN");
-    add(osc1, Synth::ParamId::MFLD, "FOLD");
-    add(osc1, Synth::ParamId::MDTN, "DTN");
-    add(osc1, Synth::ParamId::MF1FRQ, "F.FRQ");
-    add(osc1, Synth::ParamId::MF1Q,   "F.Q");
+    /* Osc 1 (modulator): waveform, then amp / tuning / type rows. */
+    osc1_wave = add_wave(Synth::ParamId::MWFM);
+    add_knob(osc1, Synth::ParamId::MAMP, "AMP");
+    add_knob(osc1, Synth::ParamId::MVS,  "VEL");
+    add_knob(osc1, Synth::ParamId::MWID, "WID");
+    add_knob(osc1, Synth::ParamId::MPAN, "PAN");
+    add_knob(osc1, Synth::ParamId::MDTN, "DTN");
+    add_knob(osc1, Synth::ParamId::MFIN, "FIN");
+    add_knob(osc1, Synth::ParamId::MPRD, "PRD");
+    add_knob(osc1, Synth::ParamId::MPRT, "PRT");
+    add_knob(osc1, Synth::ParamId::MN,   "NOISE");
+    add_knob(osc1, Synth::ParamId::MFLD, "FOLD");
+    add_knob(osc1, Synth::ParamId::MSUB, "SUB");
+    add_knob(osc1, Synth::ParamId::MF1FRQ, "F.FRQ");
 
-    add(mix, Synth::ParamId::MIX, "MIX");
-    add(mix, Synth::ParamId::PM,  "PM");
-    add(mix, Synth::ParamId::FM,  "FM");
-    add(mix, Synth::ParamId::AM,  "AM");
+    /* Mix column. */
+    add_knob(mix, Synth::ParamId::MIX, "MIX");
+    add_knob(mix, Synth::ParamId::PM,  "PM");
+    add_knob(mix, Synth::ParamId::FM,  "FM");
+    add_knob(mix, Synth::ParamId::AM,  "AM");
 
-    add(osc2, Synth::ParamId::CAMP, "AMP");
-    add(osc2, Synth::ParamId::CVS,  "VEL");
-    add(osc2, Synth::ParamId::CWID, "WID");
-    add(osc2, Synth::ParamId::CPAN, "PAN");
-    add(osc2, Synth::ParamId::CFLD, "FOLD");
-    add(osc2, Synth::ParamId::CDTN, "DTN");
-    add(osc2, Synth::ParamId::CF1FRQ, "F.FRQ");
-    add(osc2, Synth::ParamId::CF1Q,   "F.Q");
+    /* Osc 2 (carrier). */
+    osc2_wave = add_wave(Synth::ParamId::CWFM);
+    add_knob(osc2, Synth::ParamId::CAMP, "AMP");
+    add_knob(osc2, Synth::ParamId::CVS,  "VEL");
+    add_knob(osc2, Synth::ParamId::CWID, "WID");
+    add_knob(osc2, Synth::ParamId::CPAN, "PAN");
+    add_knob(osc2, Synth::ParamId::CDTN, "DTN");
+    add_knob(osc2, Synth::ParamId::CFIN, "FIN");
+    add_knob(osc2, Synth::ParamId::CPRD, "PRD");
+    add_knob(osc2, Synth::ParamId::CPRT, "PRT");
+    add_knob(osc2, Synth::ParamId::CN,   "NOISE");
+    add_knob(osc2, Synth::ParamId::CFLD, "FOLD");
+    add_knob(osc2, Synth::ParamId::CDL,  "DIST");
+    add_knob(osc2, Synth::ParamId::CF1FRQ, "F.FRQ");
 
     startTimerHz(30);
 }
@@ -62,7 +77,7 @@ NewGui::~NewGui()
 }
 
 
-Knob& NewGui::add(
+Knob& NewGui::add_knob(
         std::vector<Knob*>& column,
         Synth::ParamId const id,
         char const* const label
@@ -76,10 +91,24 @@ Knob& NewGui::add(
 }
 
 
+WaveformSelector* NewGui::add_wave(Synth::ParamId const id)
+{
+    WaveformSelector* const wave = new WaveformSelector(bridge, id);
+    waves.add(wave);
+    addAndMakeVisible(wave);
+
+    return wave;
+}
+
+
 void NewGui::timerCallback()
 {
     for (Knob* const knob : knobs) {
         knob->refresh();
+    }
+
+    for (WaveformSelector* const wave : waves) {
+        wave->refresh();
     }
 }
 
@@ -101,38 +130,63 @@ void NewGui::resized()
     area.removeFromLeft(gap);
     osc2_bounds = area;
 
-    lay_out(osc1_bounds, osc1, 4);
-    lay_out(mix_bounds, mix, 1);
-    lay_out(osc2_bounds, osc2, 4);
+    lay_out_osc(osc1_bounds, osc1_wave, osc1);
+    lay_out_mix(mix_bounds, mix);
+    lay_out_osc(osc2_bounds, osc2_wave, osc2);
 }
 
 
-void NewGui::lay_out(
+void NewGui::lay_out_osc(
         juce::Rectangle<int> panel,
-        std::vector<Knob*>& column,
-        int const columns
+        WaveformSelector* wave,
+        std::vector<Knob*>& knobs_
 ) {
     juce::Rectangle<int> inner = panel.reduced(12);
-    inner.removeFromTop(20);   /* leave room for the panel title */
+    inner.removeFromTop(20);   /* title */
 
-    int const rows = ((int)column.size() + columns - 1) / columns;
-
-    if (rows < 1 || columns < 1) {
-        return;
+    if (wave != nullptr) {
+        wave->setBounds(inner.removeFromTop(48));
     }
 
+    inner.removeFromTop(6);
+
+    int const columns = 4;
+    int const rows = 3;
     int const cell_w = inner.getWidth() / columns;
     int const cell_h = inner.getHeight() / rows;
 
-    for (int i = 0; i != (int)column.size(); ++i) {
+    for (int i = 0; i != (int)knobs_.size(); ++i) {
         int const row = i / columns;
         int const col = i % columns;
 
-        column[(size_t)i]->setBounds(
+        knobs_[(size_t)i]->setBounds(
             inner.getX() + col * cell_w,
             inner.getY() + row * cell_h,
             cell_w,
             cell_h
+        );
+    }
+}
+
+
+void NewGui::lay_out_mix(
+        juce::Rectangle<int> panel,
+        std::vector<Knob*>& knobs_
+) {
+    juce::Rectangle<int> inner = panel.reduced(12);
+    inner.removeFromTop(20);
+
+    int const n = (int)knobs_.size();
+
+    if (n < 1) {
+        return;
+    }
+
+    int const cell_h = inner.getHeight() / n;
+
+    for (int i = 0; i != n; ++i) {
+        knobs_[(size_t)i]->setBounds(
+            inner.getX(), inner.getY() + i * cell_h, inner.getWidth(), cell_h
         );
     }
 }
@@ -163,7 +217,6 @@ void NewGui::paint(juce::Graphics& g)
 {
     g.fillAll(Theme::BG);
 
-    /* Header. */
     g.setColour(Theme::PANEL_2);
     g.fillRect(header_bounds);
     g.setColour(Theme::EDGE_SOFT);
@@ -171,12 +224,8 @@ void NewGui::paint(juce::Graphics& g)
 
     g.setColour(Theme::TEXT);
     g.setFont(juce::Font(juce::FontOptions().withHeight(20.0f).withStyle("Bold")));
-    g.drawText(
-        "JS80P",
-        header_bounds.reduced(16, 0),
-        juce::Justification::centredLeft,
-        false
-    );
+    g.drawText("JS80P", header_bounds.reduced(16, 0), juce::Justification::centredLeft, false);
+
     g.setColour(Theme::TEXT_FAINT);
     g.setFont(12.0f);
     g.drawText(

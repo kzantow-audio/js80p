@@ -28,6 +28,7 @@
 
 #include "ui/knob.hpp"
 #include "ui/param_bridge.hpp"
+#include "ui/waveform_selector.hpp"
 
 
 namespace JS80P
@@ -35,9 +36,10 @@ namespace JS80P
 
 /**
  * \brief The new simplified editor surface (work in progress). Opaque top-level
- *        component: a header strip + `Osc 1 -> Mix -> Osc 2` columns of
- *        vector knobs bound to the live Synth. Fills the editor; the original
- *        GUI stays available behind an editor-owned toggle.
+ *        component: a header strip + `Osc 1 -> Mix -> Osc 2` columns. Each
+ *        oscillator has a waveform icon selector over amp / tuning / type rows
+ *        of vector knobs, all bound to the live Synth. The original GUI stays
+ *        available behind an editor-owned toggle.
  */
 class NewGui : public juce::Component, private juce::Timer
 {
@@ -51,16 +53,21 @@ class NewGui : public juce::Component, private juce::Timer
     private:
         void timerCallback() override;
 
-        Knob& add(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
-        void lay_out(juce::Rectangle<int> panel, std::vector<Knob*>& column, int const columns);
+        Knob& add_knob(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
+        WaveformSelector* add_wave(Synth::ParamId const id);
+        void lay_out_osc(juce::Rectangle<int> panel, WaveformSelector* wave, std::vector<Knob*>& knobs);
+        void lay_out_mix(juce::Rectangle<int> panel, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
 
         ParamBridge bridge;
         juce::OwnedArray<Knob> knobs;
+        juce::OwnedArray<WaveformSelector> waves;
 
+        WaveformSelector* osc1_wave;
+        WaveformSelector* osc2_wave;
         std::vector<Knob*> osc1;
-        std::vector<Knob*> mix;
         std::vector<Knob*> osc2;
+        std::vector<Knob*> mix;
 
         juce::Rectangle<int> header_bounds;
         juce::Rectangle<int> osc1_bounds;

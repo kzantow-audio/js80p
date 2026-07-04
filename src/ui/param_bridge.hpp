@@ -69,6 +69,25 @@ class ParamBridge
             return synth.is_discrete_param(id);
         }
 
+        /** Number of options for a discrete parameter (max value + 1). */
+        int option_count(Synth::ParamId const id) const noexcept
+        {
+            return (int)synth.get_param_max_value(id) + 1;
+        }
+
+        /** Current integer value of a discrete parameter. */
+        int get_discrete(Synth::ParamId const id) const noexcept
+        {
+            return (int)synth.byte_param_ratio_to_display_value(
+                id, synth.get_param_ratio_atomic(id)
+            );
+        }
+
+        void set_discrete(Synth::ParamId const id, int const value) noexcept
+        {
+            set_ratio(id, synth.discrete_param_value_to_ratio(id, (Byte)value));
+        }
+
         /** The parameter's displayed value (Hz / % / dB / ...) at \c ratio. */
         Number display_value(
                 Synth::ParamId const id, Number const ratio
