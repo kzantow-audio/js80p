@@ -46,9 +46,10 @@ namespace JS80P
 class ModulatorCard : public juce::Component
 {
     public:
-        static constexpr int HEIGHT = 96;
-
         ModulatorCard(ParamBridge& bridge, ModulationManager::Group const& group);
+
+        /** LFO cards are taller to fit the 2-row waveform button group. */
+        int preferred_height() const;
 
         /** Copy the representative slot's shape to every group member. */
         void propagate();

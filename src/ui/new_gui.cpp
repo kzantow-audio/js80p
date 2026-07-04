@@ -239,8 +239,9 @@ void NewGui::layout_cards()
     int y = mod_bounds.getY() + 30;
 
     for (ModulatorCard* const card : cards) {
-        card->setBounds(mod_bounds.getX() + 8, y, mod_bounds.getWidth() - 16, ModulatorCard::HEIGHT);
-        y += ModulatorCard::HEIGHT + 6;
+        int const h = card->preferred_height();
+        card->setBounds(mod_bounds.getX() + 8, y, mod_bounds.getWidth() - 16, h);
+        y += h + 6;
     }
 }
 

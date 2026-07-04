@@ -55,6 +55,12 @@ ModulatorCard::ModulatorCard(
 }
 
 
+int ModulatorCard::preferred_height() const
+{
+    return type == Modulation::LFO ? 150 : 96;
+}
+
+
 void ModulatorCard::propagate()
 {
     for (int m : members) {
@@ -102,8 +108,9 @@ void ModulatorCard::resized()
     b.removeFromTop(14);   /* destination badges */
 
     if (wave != nullptr) {
-        wave->setBounds(b.removeFromTop(20));
-        b.removeFromTop(4);
+        /* 2 rows at the oscillator button height (20px each). */
+        wave->setBounds(b.removeFromTop(40));
+        b.removeFromTop(6);
     }
 
     int const n = (int)knobs.size();
