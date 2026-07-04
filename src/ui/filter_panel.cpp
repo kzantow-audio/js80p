@@ -97,8 +97,9 @@ void FilterPanel::resized()
     seg_a_bounds = juce::Rectangle<int>(seg_b_bounds.getX() - seg_w - 3, header.getY() + 1, seg_w, seg_h);
 
     b.removeFromTop(4);
-    juce::Rectangle<int> const type_row = b.removeFromTop(30);
-    b.removeFromTop(4);
+    /* Match one row of the oscillator waveform selector (40px / 2 rows). */
+    juce::Rectangle<int> const type_row = b.removeFromTop(20);
+    b.removeFromTop(6);
 
     int const columns = 3;
     int const cell_w = b.getWidth() / columns;
