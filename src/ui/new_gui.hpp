@@ -73,6 +73,7 @@ class NewGui : public juce::Component, private juce::Timer
         juce::Rectangle<int> osc1_bounds;
         juce::Rectangle<int> mix_bounds;
         juce::Rectangle<int> osc2_bounds;
+        juce::Rectangle<int> mod_bounds;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NewGui)
 };

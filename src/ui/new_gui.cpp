@@ -121,7 +121,14 @@ void NewGui::resized()
     area.reduce(10, 10);
 
     int const gap = 10;
-    int const mix_width = 92;
+
+    /* Right third: Modulators panel (placeholder for now). */
+    int const mod_width = juce::jmax(220, area.getWidth() / 3);
+    mod_bounds = area.removeFromRight(mod_width);
+    area.removeFromRight(gap);
+
+    /* Left two thirds: Osc 1 -> Mix -> Osc 2. */
+    int const mix_width = 82;
     int const osc_width = (area.getWidth() - mix_width - 2 * gap) / 2;
 
     osc1_bounds = area.removeFromLeft(osc_width);
@@ -145,15 +152,16 @@ void NewGui::lay_out_osc(
     inner.removeFromTop(20);   /* title */
 
     if (wave != nullptr) {
-        wave->setBounds(inner.removeFromTop(48));
+        wave->setBounds(inner.removeFromTop(40));
     }
 
     inner.removeFromTop(6);
 
+    /* Compact fixed-size cells, top-packed, leaving room below for the filter
+     * areas and per-type editor. */
     int const columns = 4;
-    int const rows = 3;
     int const cell_w = inner.getWidth() / columns;
-    int const cell_h = inner.getHeight() / rows;
+    int const cell_h = 74;
 
     for (int i = 0; i != (int)knobs_.size(); ++i) {
         int const row = i / columns;
@@ -238,6 +246,16 @@ void NewGui::paint(juce::Graphics& g)
     draw_panel(g, osc1_bounds, "OSC 1  (modulator)");
     draw_panel(g, mix_bounds, "MIX");
     draw_panel(g, osc2_bounds, "OSC 2  (carrier)");
+
+    draw_panel(g, mod_bounds, "MODULATORS");
+    g.setColour(Theme::TEXT_FAINT);
+    g.setFont(12.0f);
+    g.drawText(
+        "envelope / LFO cards - coming soon",
+        mod_bounds.reduced(14, 0),
+        juce::Justification::centred,
+        false
+    );
 }
 
 }
