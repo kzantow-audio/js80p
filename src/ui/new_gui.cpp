@@ -51,8 +51,8 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc1, Synth::ParamId::MVS,  "VEL");
     add_knob(osc1, Synth::ParamId::MWID, "WID");
     add_knob(osc1, Synth::ParamId::MPAN, "PAN");
-    add_knob(osc1, Synth::ParamId::MDTN, "DTN");
-    add_knob(osc1, Synth::ParamId::MFIN, "FIN");
+    add_knob(osc1, Synth::ParamId::MDTN, "DTN").set_semitone_snap(true);
+    add_knob(osc1, Synth::ParamId::MFIN, "FIN").set_semitone_snap(true);
     add_knob(osc1, Synth::ParamId::MPRD, "PRD");
     add_knob(osc1, Synth::ParamId::MPRT, "PRT");
     add_knob(osc1, Synth::ParamId::MN,   "NOISE");
@@ -82,8 +82,8 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc2, Synth::ParamId::CVS,  "VEL");
     add_knob(osc2, Synth::ParamId::CWID, "WID");
     add_knob(osc2, Synth::ParamId::CPAN, "PAN");
-    add_knob(osc2, Synth::ParamId::CDTN, "DTN");
-    add_knob(osc2, Synth::ParamId::CFIN, "FIN");
+    add_knob(osc2, Synth::ParamId::CDTN, "DTN").set_semitone_snap(true);
+    add_knob(osc2, Synth::ParamId::CFIN, "FIN").set_semitone_snap(true);
     add_knob(osc2, Synth::ParamId::CPRD, "PRD");
     add_knob(osc2, Synth::ParamId::CPRT, "PRT");
     add_knob(osc2, Synth::ParamId::CN,   "NOISE");

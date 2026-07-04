@@ -38,6 +38,7 @@ Knob::Knob(
     skew(1.0),
     drag_start_visual(0.0),
     dragging(false),
+    semitone_snap(false),
     assigned(false),
     mod_type(Modulation::LFO),
     mod_index(0),
@@ -51,6 +52,34 @@ Knob::Knob(
 void Knob::set_allocator(ModulatorAllocator* const a)
 {
     allocator = a;
+}
+
+
+void Knob::set_semitone_snap(bool const on)
+{
+    semitone_snap = on;
+}
+
+
+double Knob::ratio_for_display(double const target) const
+{
+    double const at_min = bridge.display_value(param_id, 0.0);
+    double const at_max = bridge.display_value(param_id, 1.0);
+    bool const increasing = at_max >= at_min;
+    double lo = 0.0;
+    double hi = 1.0;
+
+    for (int i = 0; i != 40; ++i) {
+        double const mid = 0.5 * (lo + hi);
+
+        if ((bridge.display_value(param_id, mid) < target) == increasing) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    return 0.5 * (lo + hi);
 }
 
 
@@ -186,6 +215,15 @@ void Knob::refresh()
 juce::String Knob::format_value() const
 {
     double const value = bridge.display_value(param_id, ratio);
+
+    if (semitone_snap) {
+        double const semitones = value / 100.0;
+
+        return std::fabs(semitones - std::round(semitones)) < 0.005
+            ? juce::String((int)std::round(semitones))
+            : juce::String(semitones, 2);
+    }
+
     int const decimals = (
         bridge.is_discrete(param_id)
             ? 0
@@ -381,9 +419,17 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
         depth = juce::jlimit(0.0, 1.0, drag_start_depth + delta);
         write_depth(depth);
         repaint();
-    } else {
-        commit(visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta)));
+        return;
     }
+
+    double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
+
+    if (semitone_snap && !event.mods.isCtrlDown()) {
+        double const cents = bridge.display_value(param_id, new_ratio);
+        new_ratio = ratio_for_display(std::round(cents / 100.0) * 100.0);
+    }
+
+    commit(new_ratio);
 }
 
 
@@ -406,17 +452,27 @@ void Knob::mouseDoubleClick(juce::MouseEvent const& /* event */)
 
 
 void Knob::mouseWheelMove(
-        juce::MouseEvent const& /* event */,
+        juce::MouseEvent const& event,
         juce::MouseWheelDetails const& wheel
 ) {
     if (assigned) {
         depth = juce::jlimit(0.0, 1.0, depth + (double)wheel.deltaY * WHEEL_STEP);
         write_depth(depth);
         repaint();
-    } else {
-        double const v = ratio_to_visual(ratio) + (double)wheel.deltaY * WHEEL_STEP;
-        commit(visual_to_ratio(juce::jlimit(0.0, 1.0, v)));
+        return;
     }
+
+    if (semitone_snap && !event.mods.isCtrlDown()) {
+        double const semitones = bridge.display_value(param_id, ratio) / 100.0;
+        double const next = wheel.deltaY > 0.0f
+            ? std::floor(semitones) + 1.0
+            : std::ceil(semitones) - 1.0;
+        commit(ratio_for_display(next * 100.0));
+        return;
+    }
+
+    double const v = ratio_to_visual(ratio) + (double)wheel.deltaY * WHEEL_STEP;
+    commit(visual_to_ratio(juce::jlimit(0.0, 1.0, v)));
 }
 
 }

@@ -52,6 +52,13 @@ class Knob : public juce::Component
 
         void set_center_value(double const display_value);
 
+        /**
+         * \brief Pitch mode: the display value is in cents, so it is shown in
+         *        semitones (value / 100), and drag/wheel snap to whole
+         *        semitones unless Ctrl is held (continuous fine adjustment).
+         */
+        void set_semitone_snap(bool const on);
+
         void refresh();
 
         void paint(juce::Graphics& g) override;
@@ -74,6 +81,7 @@ class Knob : public juce::Component
 
         double ratio_to_visual(double const r) const;
         double visual_to_ratio(double const v) const;
+        double ratio_for_display(double const target) const;
 
         void update_assignment();
         void open_assign_menu();
@@ -91,6 +99,7 @@ class Knob : public juce::Component
         double skew;
         double drag_start_visual;
         bool dragging;
+        bool semitone_snap;
 
         bool assigned;
         Modulation::Type mod_type;
