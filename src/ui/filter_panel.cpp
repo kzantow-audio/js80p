@@ -105,15 +105,18 @@ void FilterPanel::resized()
     juce::Rectangle<int> const type_row = b.removeFromTop(20);
     b.removeFromTop(6);
 
-    int const columns = 3;
-    int const cell_w = b.getWidth() / columns;
+    /* FREQ stays large (left, full height); Q and GAIN match the oscillator
+     * knob size (a quarter of the panel width, 72px tall). */
+    int const small_w = b.getWidth() / 4;
+    int const small_h = 72;
+    int const freq_w = b.getWidth() - 2 * small_w;
+    int const small_y = b.getY() + (b.getHeight() - small_h) / 2;
 
     for (int f = 0; f != 2; ++f) {
         types[f]->setBounds(type_row);
-
-        for (int k = 0; k != 3; ++k) {
-            knobs[f * 3 + k]->setBounds(b.getX() + k * cell_w, b.getY(), cell_w, b.getHeight());
-        }
+        knobs[f * 3 + 0]->setBounds(b.getX(), b.getY(), freq_w, b.getHeight());
+        knobs[f * 3 + 1]->setBounds(b.getX() + freq_w, small_y, small_w, small_h);
+        knobs[f * 3 + 2]->setBounds(b.getX() + freq_w + small_w, small_y, small_w, small_h);
     }
 }
 
