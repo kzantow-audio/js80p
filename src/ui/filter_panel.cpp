@@ -88,9 +88,9 @@ void FilterPanel::refresh()
 
 void FilterPanel::resized()
 {
-    juce::Rectangle<int> b = getLocalBounds().reduced(6);
+    juce::Rectangle<int> b = getLocalBounds().reduced(9);
 
-    juce::Rectangle<int> const header = b.removeFromTop(18);
+    juce::Rectangle<int> const header = b.removeFromTop(20);
     int const seg_w = 26;
     int const seg_h = 15;
     seg_b_bounds = juce::Rectangle<int>(header.getRight() - seg_w, header.getY() + 1, seg_w, seg_h);
@@ -125,15 +125,15 @@ void FilterPanel::mouseDown(juce::MouseEvent const& event)
 
 void FilterPanel::paint(juce::Graphics& g)
 {
-    juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(1.0f);
-    g.setColour(Theme::INSET);
-    g.fillRoundedRectangle(box, 2.0f);
+    juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(Theme::PANEL);
+    g.fillRoundedRectangle(box, Theme::RADIUS);
     g.setColour(Theme::EDGE);
-    g.drawRoundedRectangle(box, 2.0f, 1.0f);
+    g.drawRoundedRectangle(box, Theme::RADIUS, 1.0f);
 
     g.setColour(Theme::TEXT_DIM);
-    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
-    g.drawText("FILTERS", 8, 5, 80, 14, juce::Justification::centredLeft, false);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
+    g.drawText("FILTERS", 10, 8, 100, 16, juce::Justification::centredLeft, false);
 
     juce::Rectangle<int> const segs[2] = { seg_a_bounds, seg_b_bounds };
     juce::String const labels[2] = { label_a, label_b };

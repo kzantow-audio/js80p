@@ -175,9 +175,10 @@ void NewGui::resized()
     juce::Rectangle<int> area = getLocalBounds();
 
     header_bounds = area.removeFromTop(46);
-    area.reduce(10, 10);
+    area.reduce(5, 5);
 
-    int const gap = 10;
+    int const gap = 5;
+    int const filter_height = 150;
 
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
@@ -186,26 +187,37 @@ void NewGui::resized()
     int const mix_width = 84;
     int const osc_width = (area.getWidth() - mix_width - 2 * gap) / 2;
 
-    osc1_bounds = area.removeFromLeft(osc_width);
+    juce::Rectangle<int> osc1_col = area.removeFromLeft(osc_width);
     area.removeFromLeft(gap);
     mix_bounds = area.removeFromLeft(mix_width);
     area.removeFromLeft(gap);
-    osc2_bounds = area;
+    juce::Rectangle<int> osc2_col = area;
 
-    lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_filters);
+    /* Each oscillator column: OSC panel on top, its FILTERS panel below. */
+    juce::Rectangle<int> const osc1_filter_bounds = osc1_col.removeFromBottom(filter_height);
+    osc1_col.removeFromBottom(gap);
+    osc1_bounds = osc1_col;
+
+    juce::Rectangle<int> const osc2_filter_bounds = osc2_col.removeFromBottom(filter_height);
+    osc2_col.removeFromBottom(gap);
+    osc2_bounds = osc2_col;
+
+    osc1_filters->setBounds(osc1_filter_bounds);
+    osc2_filters->setBounds(osc2_filter_bounds);
+
+    lay_out_osc(osc1_bounds, osc1_wave, osc1);
     lay_out_mix(mix_bounds, mode_selector, mix);
-    lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_filters);
+    lay_out_osc(osc2_bounds, osc2_wave, osc2);
 }
 
 
 void NewGui::lay_out_osc(
         juce::Rectangle<int> panel,
         WaveformSelector* wave,
-        std::vector<Knob*>& main,
-        FilterPanel* filter
+        std::vector<Knob*>& main
 ) {
-    juce::Rectangle<int> inner = panel.reduced(12);
-    inner.removeFromTop(20);   /* title */
+    juce::Rectangle<int> inner = panel.reduced(10);
+    inner.removeFromTop(18);   /* title */
 
     if (wave != nullptr) {
         wave->setBounds(inner.removeFromTop(40));
@@ -225,13 +237,6 @@ void NewGui::lay_out_osc(
             cell_h
         );
     }
-
-    int const main_rows = ((int)main.size() + columns - 1) / columns;
-    inner.removeFromTop(main_rows * cell_h + 8);
-
-    if (filter != nullptr) {
-        filter->setBounds(inner.removeFromTop(140));
-    }
 }
 
 
@@ -240,8 +245,8 @@ void NewGui::lay_out_mix(
         Selector* mode,
         std::vector<Knob*>& knobs_
 ) {
-    juce::Rectangle<int> inner = panel.reduced(12);
-    inner.removeFromTop(20);
+    juce::Rectangle<int> inner = panel.reduced(10);
+    inner.removeFromTop(18);
 
     if (mode != nullptr) {
         mode->setBounds(inner.removeFromTop(40));

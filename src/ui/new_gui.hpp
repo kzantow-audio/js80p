@@ -69,8 +69,7 @@ class NewGui : public juce::Component, private juce::Timer
         void lay_out_osc(
             juce::Rectangle<int> panel,
             WaveformSelector* wave,
-            std::vector<Knob*>& main,
-            FilterPanel* filter
+            std::vector<Knob*>& main
         );
         void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
