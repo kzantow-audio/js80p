@@ -24,10 +24,6 @@
 namespace JS80P
 {
 
-static juce::StringArray const FILTER_TYPES {
-    "LP", "HP", "BP", "Notch", "Bell", "LS", "HS"
-};
-
 static juce::StringArray const MODES {
     "Mix&Mod",
     "Split C3", "Split Db3", "Split D3", "Split Eb3", "Split E3", "Split F3",
@@ -40,9 +36,9 @@ NewGui::NewGui(Synth& synth)
     : bridge(synth),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
-    osc1_filter_type(nullptr),
-    osc2_filter_type(nullptr),
-    mode_selector(nullptr)
+    mode_selector(nullptr),
+    osc1_filters(nullptr),
+    osc2_filters(nullptr)
 {
     setOpaque(true);
 
@@ -59,10 +55,11 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc1, Synth::ParamId::MN,   "NOISE");
     add_knob(osc1, Synth::ParamId::MFLD, "FOLD");
     add_knob(osc1, Synth::ParamId::MSUB, "SUB");
-    osc1_filter_type = add_selector(Synth::ParamId::MF1TYP, FILTER_TYPES, "FILTER 1");
-    add_knob(osc1_filter, Synth::ParamId::MF1FRQ, "FREQ");
-    add_knob(osc1_filter, Synth::ParamId::MF1Q,   "Q");
-    add_knob(osc1_filter, Synth::ParamId::MF1G,   "GAIN");
+    osc1_filters = add_filters(
+        { Synth::ParamId::MF1TYP, Synth::ParamId::MF1FRQ, Synth::ParamId::MF1Q, Synth::ParamId::MF1G },
+        { Synth::ParamId::MF2TYP, Synth::ParamId::MF2FRQ, Synth::ParamId::MF2Q, Synth::ParamId::MF2G },
+        "1", "2"
+    );
 
     /* Mix column. */
     mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
@@ -71,7 +68,7 @@ NewGui::NewGui(Synth& synth)
     add_knob(mix, Synth::ParamId::FM,  "FM");
     add_knob(mix, Synth::ParamId::AM,  "AM");
 
-    /* Osc 2 (carrier). */
+    /* Osc 2 (carrier). Its two filters are the 3rd and 4th overall. */
     osc2_wave = add_wave(Synth::ParamId::CWFM);
     add_knob(osc2, Synth::ParamId::CAMP, "AMP");
     add_knob(osc2, Synth::ParamId::CVS,  "VEL");
@@ -84,10 +81,11 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc2, Synth::ParamId::CN,   "NOISE");
     add_knob(osc2, Synth::ParamId::CFLD, "FOLD");
     add_knob(osc2, Synth::ParamId::CDL,  "DIST");
-    osc2_filter_type = add_selector(Synth::ParamId::CF1TYP, FILTER_TYPES, "FILTER 1");
-    add_knob(osc2_filter, Synth::ParamId::CF1FRQ, "FREQ");
-    add_knob(osc2_filter, Synth::ParamId::CF1Q,   "Q");
-    add_knob(osc2_filter, Synth::ParamId::CF1G,   "GAIN");
+    osc2_filters = add_filters(
+        { Synth::ParamId::CF1TYP, Synth::ParamId::CF1FRQ, Synth::ParamId::CF1Q, Synth::ParamId::CF1G },
+        { Synth::ParamId::CF2TYP, Synth::ParamId::CF2FRQ, Synth::ParamId::CF2Q, Synth::ParamId::CF2G },
+        "3", "4"
+    );
 
     startTimerHz(30);
 }
@@ -136,6 +134,22 @@ Selector* NewGui::add_selector(
 }
 
 
+FilterPanel* NewGui::add_filters(
+        FilterPanel::Spec const& a,
+        FilterPanel::Spec const& b,
+        juce::String label_a,
+        juce::String label_b
+) {
+    FilterPanel* const panel = new FilterPanel(
+        bridge, a, b, std::move(label_a), std::move(label_b)
+    );
+    filters.add(panel);
+    addAndMakeVisible(panel);
+
+    return panel;
+}
+
+
 void NewGui::timerCallback()
 {
     for (Knob* const knob : knobs) {
@@ -148,6 +162,10 @@ void NewGui::timerCallback()
 
     for (Selector* const selector : selectors) {
         selector->refresh();
+    }
+
+    for (FilterPanel* const filter : filters) {
+        filter->refresh();
     }
 }
 
@@ -174,9 +192,9 @@ void NewGui::resized()
     area.removeFromLeft(gap);
     osc2_bounds = area;
 
-    lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_filter_type, osc1_filter);
+    lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_filters);
     lay_out_mix(mix_bounds, mode_selector, mix);
-    lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_filter_type, osc2_filter);
+    lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_filters);
 }
 
 
@@ -184,8 +202,7 @@ void NewGui::lay_out_osc(
         juce::Rectangle<int> panel,
         WaveformSelector* wave,
         std::vector<Knob*>& main,
-        Selector* filter,
-        std::vector<Knob*>& filter_knobs
+        FilterPanel* filter
 ) {
     juce::Rectangle<int> inner = panel.reduced(12);
     inner.removeFromTop(20);   /* title */
@@ -210,16 +227,10 @@ void NewGui::lay_out_osc(
     }
 
     int const main_rows = ((int)main.size() + columns - 1) / columns;
-    int const filter_y = inner.getY() + main_rows * cell_h + 6;
+    inner.removeFromTop(main_rows * cell_h + 8);
 
     if (filter != nullptr) {
-        filter->setBounds(inner.getX() + 3, filter_y + 15, cell_w - 6, 40);
-    }
-
-    for (int i = 0; i != (int)filter_knobs.size(); ++i) {
-        filter_knobs[(size_t)i]->setBounds(
-            inner.getX() + (i + 1) * cell_w, filter_y, cell_w, cell_h
-        );
+        filter->setBounds(inner.removeFromTop(140));
     }
 }
 
