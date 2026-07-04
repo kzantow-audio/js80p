@@ -24,6 +24,8 @@
 #include "js80p.hpp"
 #include "synth.hpp"
 
+#include "ui/modulation.hpp"
+#include "ui/modulator_allocator.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -32,7 +34,9 @@ namespace JS80P
 
 /**
  * \brief A resolution-independent rotary control bound to one Synth parameter.
- *        Vector-drawn (no PNG frames); drag / wheel / double-click-to-default.
+ *        Vector-drawn; drag / wheel / double-click-to-default. When a modulator
+ *        is assigned it shows a colour-coded ring + badge and its drag edits the
+ *        modulator's range (a secondary display) instead of a dead value.
  */
 class Knob : public juce::Component
 {
@@ -43,15 +47,11 @@ class Knob : public juce::Component
             juce::String const& label
         );
 
-        /**
-         * \brief Warp the knob so \c display_value sits at the visual centre
-         *        (e.g. 1000 Hz mid-travel on a filter cutoff). The engine's
-         *        parameter scale is unchanged — only the knob's visual/drag
-         *        mapping is skewed.
-         */
+        /** Make this knob a modulation destination (right-click to assign). */
+        void set_allocator(ModulatorAllocator* const allocator);
+
         void set_center_value(double const display_value);
 
-        /** Pull the live value ratio from the engine unless being dragged. */
         void refresh();
 
         void paint(juce::Graphics& g) override;
@@ -67,22 +67,36 @@ class Knob : public juce::Component
     private:
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
+        static constexpr double DEFAULT_DEPTH = 0.5;
 
         juce::String format_value() const;
         void commit(double const new_ratio);
 
-        /* Visual travel <-> parameter ratio: ratio = pow(visual, skew). */
         double ratio_to_visual(double const r) const;
         double visual_to_ratio(double const v) const;
+
+        void update_assignment();
+        void open_assign_menu();
+        void assign(Modulation::Type const type);
+        void remove_assignment();
+        double read_depth() const;
+        void write_depth(double const depth);
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
         juce::String const label;
+        ModulatorAllocator* allocator;
 
         double ratio;
         double skew;
         double drag_start_visual;
         bool dragging;
+
+        bool assigned;
+        Modulation::Type mod_type;
+        int mod_index;
+        double depth;
+        double drag_start_depth;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Knob)
 };

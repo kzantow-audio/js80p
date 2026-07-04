@@ -34,6 +34,7 @@ static juce::StringArray const MODES {
 
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
+    allocator(bridge),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
@@ -115,6 +116,7 @@ Knob& NewGui::add_knob(
         char const* const label
 ) {
     Knob* const knob = new Knob(bridge, id, label);
+    knob->set_allocator(&allocator);
     knobs.add(knob);
     column.push_back(knob);
     addAndMakeVisible(knob);
@@ -153,7 +155,7 @@ FilterPanel* NewGui::add_filters(
         juce::String label_b
 ) {
     FilterPanel* const panel = new FilterPanel(
-        bridge, a, b, std::move(label_a), std::move(label_b)
+        bridge, allocator, a, b, std::move(label_a), std::move(label_b)
     );
     filters.add(panel);
     addAndMakeVisible(panel);
@@ -182,6 +184,27 @@ void NewGui::timerCallback()
 
     for (PerTypeEditor* const editor : type_editors) {
         editor->refresh();
+    }
+
+    /* Live overview of active source -> destination assignments. */
+    std::vector<juce::String> lines;
+
+    for (int pid = 0; pid != (int)Synth::ParamId::PARAM_ID_COUNT; ++pid) {
+        Modulation::Type type;
+        int index;
+
+        if (Modulation::decode(bridge.controller((Synth::ParamId)pid), type, index)) {
+            lines.push_back(
+                juce::String(Modulation::prefix(type)) + juce::String(index)
+                + "  ->  "
+                + juce::String(bridge.param_name((Synth::ParamId)pid).c_str())
+            );
+        }
+    }
+
+    if (lines != mod_lines) {
+        mod_lines = lines;
+        repaint(mod_bounds);
     }
 }
 
@@ -335,14 +358,31 @@ void NewGui::paint(juce::Graphics& g)
     draw_panel(g, osc2_bounds, "OSC 2  (carrier)");
 
     draw_panel(g, mod_bounds, "MODULATORS");
-    g.setColour(Theme::TEXT_FAINT);
-    g.setFont(12.0f);
-    g.drawText(
-        "envelope / LFO cards - coming soon",
-        mod_bounds.reduced(14, 0),
-        juce::Justification::centred,
-        false
-    );
+
+    if (mod_lines.empty()) {
+        g.setColour(Theme::TEXT_FAINT);
+        g.setFont(11.0f);
+        g.drawText(
+            "right-click any knob to assign a modulator",
+            mod_bounds.reduced(16, 0),
+            juce::Justification::centred,
+            false
+        );
+    } else {
+        g.setFont(12.0f);
+        int y = mod_bounds.getY() + 34;
+
+        for (juce::String const& line : mod_lines) {
+            if (y > mod_bounds.getBottom() - 16) {
+                break;
+            }
+
+            g.setColour(Theme::TEXT);
+            g.drawText(line, mod_bounds.getX() + 16, y, mod_bounds.getWidth() - 32, 18,
+                       juce::Justification::centredLeft, false);
+            y += 20;
+        }
+    }
 }
 
 }

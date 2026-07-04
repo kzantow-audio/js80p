@@ -69,6 +69,11 @@ class ParamBridge
             return synth.is_discrete_param(id);
         }
 
+        std::string const& param_name(Synth::ParamId const id) const noexcept
+        {
+            return synth.get_param_name(id);
+        }
+
         /** Number of options for a discrete parameter (max value + 1). */
         int option_count(Synth::ParamId const id) const noexcept
         {
@@ -103,6 +108,15 @@ class ParamBridge
         Synth::ControllerId controller(Synth::ParamId const id) const noexcept
         {
             return synth.get_param_controller_id_atomic(id);
+        }
+
+        /** Assign (or, with NONE, clear) a controller for a parameter. */
+        void assign_controller(
+                Synth::ParamId const id, Synth::ControllerId const controller
+        ) noexcept {
+            synth.push_message(
+                Synth::MessageType::ASSIGN_CONTROLLER, id, 0.0, (Byte)controller
+            );
         }
 
     private:

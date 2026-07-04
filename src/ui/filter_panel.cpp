@@ -26,6 +26,7 @@ namespace JS80P
 
 FilterPanel::FilterPanel(
         ParamBridge& bridge,
+        ModulatorAllocator& allocator,
         Spec const& a,
         Spec const& b,
         juce::String label_a,
@@ -51,6 +52,7 @@ FilterPanel::FilterPanel(
         knobs[f * 3]->set_center_value(1000.0);   /* 1 kHz at mid-travel */
 
         for (int k = 0; k != 3; ++k) {
+            knobs[f * 3 + k]->set_allocator(&allocator);
             addChildComponent(knobs[f * 3 + k]);
         }
     }
