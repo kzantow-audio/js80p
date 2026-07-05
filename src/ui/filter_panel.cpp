@@ -133,11 +133,9 @@ void FilterPanel::mouseDown(juce::MouseEvent const& event)
 
 void FilterPanel::paint(juce::Graphics& g)
 {
-    juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(0.5f);
-    g.setColour(Theme::PANEL);
-    g.fillRoundedRectangle(box, Theme::RADIUS);
+    /* No box - the FilterPanel sits inside its OSC panel; a divider separates it. */
     g.setColour(Theme::EDGE);
-    g.drawRoundedRectangle(box, Theme::RADIUS, 1.0f);
+    g.fillRect(6, 0, getWidth() - 12, 1);
 
     g.setColour(Theme::TEXT_DIM);
     g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));

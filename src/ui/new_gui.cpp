@@ -338,7 +338,11 @@ void NewGui::resized()
     area.removeFromLeft(gap);
     juce::Rectangle<int> osc2_col = area;
 
-    /* Each oscillator column: OSC panel on top, its FILTERS panel below. */
+    /* Each oscillator column is one panel that contains its filters at the
+     * bottom. */
+    osc1_panel_bounds = osc1_col;
+    osc2_panel_bounds = osc2_col;
+
     juce::Rectangle<int> const osc1_filter_bounds = osc1_col.removeFromBottom(filter_height);
     osc1_col.removeFromBottom(gap);
     osc1_bounds = osc1_col;
@@ -478,8 +482,8 @@ void NewGui::paint(juce::Graphics& g)
         false
     );
 
-    draw_panel(g, osc1_bounds, "OSC 1  (modulator)");
-    draw_panel(g, osc2_bounds, "OSC 2  (carrier)");
+    draw_panel(g, osc1_panel_bounds, "OSC 1  (modulator)");
+    draw_panel(g, osc2_panel_bounds, "OSC 2  (carrier)");
     /* MIX and MODULATORS are title-less, transparent sections. */
 
     if (cards.isEmpty()) {
