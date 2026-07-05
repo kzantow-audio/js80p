@@ -114,9 +114,10 @@ juce::Rectangle<float> MacroCell::badge_rect() const
 
     float const h = 13.0f;
     float const rr = kb.getWidth() * 0.5f + 3.0f;
-    float const diag = 0.7071f;
-    float x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), kb.getCentreX() + diag * rr + 3.0f);
-    float y = juce::jmax(0.0f, kb.getCentreY() - diag * rr - h + 3.0f);
+    /* Top level with the ring top; bottom-left corner on the ring (+2px clear). */
+    float const dx = std::sqrt(juce::jmax(0.0f, h * (2.0f * rr - h)));
+    float x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), kb.getCentreX() + dx + 2.0f);
+    float y = juce::jmax(0.0f, kb.getCentreY() - rr);
     return juce::Rectangle<float>(x, y, w, h);
 }
 
