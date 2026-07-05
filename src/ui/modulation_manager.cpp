@@ -323,6 +323,28 @@ int ModulationManager::assign_source(
 }
 
 
+void ModulationManager::reset()
+{
+    reserved.clear();
+    slot_group.clear();
+    groups_.clear();
+    next_group_id = 1;
+}
+
+
+void ModulationManager::reserve_group(
+        Modulation::Type const type, std::vector<int> const& slots
+) {
+    int const gid = next_group_id++;
+
+    for (int const s : slots) {
+        int const sk = slot_key(type, s);
+        reserved.insert(sk);
+        slot_group[sk] = gid;
+    }
+}
+
+
 void ModulationManager::unassign(Synth::ParamId const dest)
 {
     Modulation::Type type;

@@ -52,6 +52,11 @@ NewGui::NewGui(Synth& synth)
     mod_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(mod_viewport);
 
+    init_button.setButtonText("INIT");
+    init_button.setWantsKeyboardFocus(false);
+    init_button.onClick = [this]() { init_patch(); };
+    addAndMakeVisible(init_button);
+
     /* Osc 1 (modulator). */
     osc1_wave = add_wave(Synth::ParamId::MWFM);
     add_knob(osc1, Synth::ParamId::MAMP, "AMP");
@@ -220,6 +225,54 @@ void NewGui::timerCallback()
 }
 
 
+void NewGui::init_patch()
+{
+    /* 1. Keep the performance macros' MIDI-CC inputs across the reset. */
+    Synth::ControllerId saved[MacroStrip::COUNT];
+    for (int m = 0; m != MacroStrip::COUNT; ++m) {
+        saved[m] = bridge.controller(Modulation::macro_in(m + 1));
+    }
+
+    /* 2. Reset every parameter to its default and clear all controllers. */
+    for (int p = 0; p != (int)Synth::ParamId::PARAM_ID_COUNT; ++p) {
+        Synth::ParamId const id = (Synth::ParamId)p;
+        bridge.assign_controller(id, Synth::ControllerId::NONE);
+        bridge.set_ratio(id, bridge.get_default_ratio(id));
+    }
+
+    /* 3. Restore the saved macro CC inputs. */
+    for (int m = 0; m != MacroStrip::COUNT; ++m) {
+        if (saved[m] != Synth::ControllerId::NONE) {
+            bridge.assign_controller(Modulation::macro_in(m + 1), saved[m]);
+        }
+    }
+
+    /* 4. Two explicit envelope groups (AMP = env 1+2, filter = env 3+4). */
+    manager.reset();
+    manager.reserve_group(Modulation::ENVELOPE, { 1, 2 });
+    manager.reserve_group(Modulation::ENVELOPE, { 3, 4 });
+
+    auto setup_env = [this](int const slot, double const base, double const peak) {
+        bridge.set_ratio(Modulation::env_ini(slot), base);
+        bridge.set_ratio(Modulation::env_fin(slot), base);
+        bridge.set_ratio(Modulation::env_pk(slot), peak);
+        bridge.set_ratio(Modulation::env_sus(slot), peak);   /* full sustain */
+    };
+
+    /* 5a. AMP: level 0, modulation full range (env 1 -> Osc 1 AMP, copy to Osc 2). */
+    setup_env(1, 0.0, 1.0);
+    setup_env(2, 0.0, 1.0);
+    bridge.assign_controller(Synth::ParamId::MAMP, Modulation::controller_id(Modulation::ENVELOPE, 1));
+    bridge.assign_controller(Synth::ParamId::CAMP, Modulation::controller_id(Modulation::ENVELOPE, 2));
+
+    /* 5b. Filter cutoff (Filter 1 = MF1, Filter 3 = CF1): mid base, sweep up to max. */
+    setup_env(3, 0.5, 1.0);
+    setup_env(4, 0.5, 1.0);
+    bridge.assign_controller(Synth::ParamId::MF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 3));
+    bridge.assign_controller(Synth::ParamId::CF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 4));
+}
+
+
 void NewGui::rebuild_cards()
 {
     cards.clear();
@@ -258,6 +311,7 @@ void NewGui::resized()
     juce::Rectangle<int> area = getLocalBounds();
 
     header_bounds = area.removeFromTop(46);
+    init_button.setBounds(header_bounds.getX() + 96, header_bounds.getCentreY() - 11, 52, 22);
     macro_strip.setBounds(area.removeFromTop(66));
     area.reduce(5, 5);
 

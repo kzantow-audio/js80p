@@ -94,6 +94,12 @@ class ModulationManager
 
         void unassign(Synth::ParamId const dest);
 
+        /** Clear all grouping state (used when building a patch from scratch). */
+        void reset();
+
+        /** Reserve a set of slots as one group with a fresh id (for INIT). */
+        void reserve_group(Modulation::Type const type, std::vector<int> const& slots);
+
     private:
         std::string shape_key(Modulation::Type const type, int const index) const;
         int allocate(Modulation::Type const type, bool const need_pw);

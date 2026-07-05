@@ -83,8 +83,10 @@ class NewGui : public juce::Component, private juce::Timer
 
         void rebuild_cards();
         void layout_cards();
+        void init_patch();
 
         ParamBridge bridge;
+        juce::TextButton init_button;
         ModulationManager manager;
         MacroStrip macro_strip;
         juce::Viewport mod_viewport;
