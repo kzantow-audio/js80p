@@ -101,6 +101,10 @@ ModulatorCard::ModulatorCard(
         sus_fader->set_value(sus_fraction);
         sus_fader->on_change = [this](double const v) { sus_fraction = v; write_sustain(); };
         addAndMakeVisible(*sus_fader);
+
+        /* SCL lives in the middle of the header row (not among the knobs). */
+        env_scale = std::make_unique<EnvScaleSlider>(bridge, manager, rep, members);
+        addAndMakeVisible(*env_scale);
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         wave->set_single(true);
@@ -208,6 +212,10 @@ void ModulatorCard::refresh()
         write_sustain();   /* keep SUS tracking the fraction as min/max change */
     }
 
+    if (env_scale != nullptr) {
+        env_scale->refresh();
+    }
+
     for (Knob* const k : knobs) {
         k->refresh();
     }
@@ -229,6 +237,20 @@ void ModulatorCard::refresh()
 void ModulatorCard::resized()
 {
     juce::Rectangle<int> b = getLocalBounds().reduced(6);
+
+    /* SCL slider in the middle of the header row: destination badges keep the
+     * left, and ~40px on the far right stays clear for later per-member circles. */
+    if (env_scale != nullptr) {
+        int const far_right = 40;
+        int const scl_w = 134;
+        int const scl_h = 16;
+        int const scl_y = 3;
+        int scl_x = getWidth() / 2 - scl_w / 2;
+        scl_x = juce::jmin(scl_x, getWidth() - far_right - scl_w);
+        scl_x = juce::jmax(scl_x, 8);
+        env_scale->setBounds(scl_x, scl_y, scl_w, scl_h);
+    }
+
     b.removeFromTop(16);   /* one-line header */
 
     if (type == Modulation::LFO) {

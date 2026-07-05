@@ -29,6 +29,7 @@
 #include "synth.hpp"
 
 #include "ui/curve_selector.hpp"
+#include "ui/env_scale_slider.hpp"
 #include "ui/knob.hpp"
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
@@ -81,6 +82,7 @@ class ModulatorCard : public juce::Component
         juce::OwnedArray<Knob> knobs;        /* env D/A/H/D/R or LFO rate/phase/... */
         juce::OwnedArray<CurveSelector> curves;   /* env attack/decay/release shapes */
         std::unique_ptr<VFader> sus_fader;   /* env sustain fraction (min..max) */
+        std::unique_ptr<EnvScaleSlider> env_scale;   /* env SCL, in the header row */
         double sus_fraction;
         std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
         std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */
