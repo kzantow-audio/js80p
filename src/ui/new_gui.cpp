@@ -252,22 +252,29 @@ void NewGui::init_patch()
     manager.reserve_group(Modulation::ENVELOPE, { 1, 2 });
     manager.reserve_group(Modulation::ENVELOPE, { 3, 4 });
 
-    auto setup_env = [this](int const slot, double const base, double const peak) {
+    auto setup_env = [this](
+            int const slot, double const base, double const peak,
+            double const sus, double const dec_s, double const rel_s) {
         bridge.set_ratio(Modulation::env_ini(slot), base);
         bridge.set_ratio(Modulation::env_fin(slot), base);
         bridge.set_ratio(Modulation::env_pk(slot), peak);
-        bridge.set_ratio(Modulation::env_sus(slot), peak);   /* full sustain */
+        bridge.set_ratio(Modulation::env_sus(slot), sus);
+        bridge.set_ratio(Modulation::env_hld(slot), 0.0);
+        bridge.set_ratio(Modulation::env_dec(slot), bridge.ratio_for_display(Modulation::env_dec(slot), dec_s));
+        bridge.set_ratio(Modulation::env_rel(slot), bridge.ratio_for_display(Modulation::env_rel(slot), rel_s));
     };
 
-    /* 5a. AMP: level 0, modulation full range (env 1 -> Osc 1 AMP, copy to Osc 2). */
-    setup_env(1, 0.0, 1.0);
-    setup_env(2, 0.0, 1.0);
+    /* 5a. AMP: level 0, full-range modulation; hold 0, 100% sustain, 1.5 s
+     * decay/release (env 1 -> Osc 1 AMP, copy to Osc 2). */
+    setup_env(1, 0.0, 1.0, 1.0, 1.5, 1.5);
+    setup_env(2, 0.0, 1.0, 1.0, 1.5, 1.5);
     bridge.assign_controller(Synth::ParamId::MAMP, Modulation::controller_id(Modulation::ENVELOPE, 1));
     bridge.assign_controller(Synth::ParamId::CAMP, Modulation::controller_id(Modulation::ENVELOPE, 2));
 
-    /* 5b. Filter cutoff (Filter 1 = MF1, Filter 3 = CF1): mid base, sweep up to max. */
-    setup_env(3, 0.5, 1.0);
-    setup_env(4, 0.5, 1.0);
+    /* 5b. Filter cutoff (Filter 1 = MF1, Filter 3 = CF1): mid base, sweep up to
+     * max; hold 0, 0% sustain, 1 s decay/release. */
+    setup_env(3, 0.5, 1.0, 0.5, 1.0, 1.0);
+    setup_env(4, 0.5, 1.0, 0.5, 1.0, 1.0);
     bridge.assign_controller(Synth::ParamId::MF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 3));
     bridge.assign_controller(Synth::ParamId::CF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 4));
 }

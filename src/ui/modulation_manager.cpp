@@ -40,26 +40,56 @@ static int quant(double const r)
 std::string ModulationManager::shape_key(
         Modulation::Type const type, int const index
 ) const {
+    /* Signature of a shared parameter: its value, unless it is modulated - then
+     * follow the controller so two copies match when driven by the same source
+     * with the same range (macro input + min/max), not by a stale value. */
+    auto sig = [this](Synth::ParamId const p) -> std::string {
+        Synth::ControllerId const c = bridge.controller(p);
+
+        if (c == Synth::ControllerId::NONE) {
+            return "v" + std::to_string(quant(bridge.get_ratio(p)));
+        }
+
+        Modulation::Type t;
+        int idx;
+        if (Modulation::decode(c, t, idx) && t == Modulation::MACRO) {
+            return "m" + std::to_string((int)bridge.controller(Modulation::macro_in(idx)))
+                + ":" + std::to_string(quant(bridge.get_ratio(Modulation::macro_min(idx))))
+                + ":" + std::to_string(quant(bridge.get_ratio(Modulation::macro_max(idx))));
+        }
+
+        return "c" + std::to_string((int)c);
+    };
+
     std::string key;
 
     if (type == Modulation::ENVELOPE) {
-        int const p[4] = {
-            quant(bridge.get_ratio(Modulation::env_hld(index))),
-            quant(bridge.get_ratio(Modulation::env_atk(index))),
-            quant(bridge.get_ratio(Modulation::env_dec(index))),
-            quant(bridge.get_ratio(Modulation::env_rel(index))),
+        Synth::ParamId const ps[] = {
+            Modulation::env_scl(index), Modulation::env_del(index), Modulation::env_atk(index),
+            Modulation::env_hld(index), Modulation::env_dec(index), Modulation::env_rel(index),
+            Modulation::env_tin(index), Modulation::env_vin(index), Modulation::env_ash(index),
+            Modulation::env_dsh(index), Modulation::env_rsh(index), Modulation::env_upd(index),
+            Modulation::env_syn(index),
         };
-        for (int v : p) { key += std::to_string(v); key += ':'; }
+        for (Synth::ParamId const p : ps) { key += sig(p); key += ';'; }
+
+        /* Backwards-calculated sustain fraction (shared across copies even though
+         * the absolute levels differ). */
+        double const ini = bridge.get_ratio(Modulation::env_ini(index));
+        double const pk = bridge.get_ratio(Modulation::env_pk(index));
+        double const frac = std::fabs(pk - ini) > 1.0e-6
+            ? (bridge.get_ratio(Modulation::env_sus(index)) - ini) / (pk - ini)
+            : 0.0;
+        key += "s" + std::to_string(quant(frac));
     } else if (type == Modulation::LFO) {
-        int p[6] = {
-            quant(bridge.get_ratio(Modulation::lfo_wav(index))),
-            quant(bridge.get_ratio(Modulation::lfo_frq(index))),
-            quant(bridge.get_ratio(Modulation::lfo_phs(index))),
-            quant(bridge.get_ratio(Modulation::lfo_dst(index))),
-            quant(bridge.get_ratio(Modulation::lfo_rnd(index))),
-            Modulation::lfo_has_pw(index) ? quant(bridge.get_ratio(Modulation::lfo_pw(index))) : -1,
+        Synth::ParamId const ps[] = {
+            Modulation::lfo_wav(index), Modulation::lfo_frq(index), Modulation::lfo_phs(index),
+            Modulation::lfo_dst(index), Modulation::lfo_rnd(index), Modulation::lfo_amp(index),
+            Modulation::lfo_log(index), Modulation::lfo_cen(index), Modulation::lfo_syn(index),
+            Modulation::lfo_aen(index),
         };
-        for (int v : p) { key += std::to_string(v); key += ':'; }
+        for (Synth::ParamId const p : ps) { key += sig(p); key += ';'; }
+        key += Modulation::lfo_has_pw(index) ? sig(Modulation::lfo_pw(index)) : "nopw";
     }
 
     return key;
