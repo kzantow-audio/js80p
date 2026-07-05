@@ -301,7 +301,7 @@ void NewGui::rebuild_cards()
 void NewGui::layout_cards()
 {
     int const w = mod_viewport.getWidth() - mod_viewport.getScrollBarThickness();
-    int y = 4;
+    int y = 0;
 
     for (ModulatorCard* const card : cards) {
         int const h = card->preferred_height();
@@ -355,9 +355,8 @@ void NewGui::resized()
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
 
     juce::Rectangle<int> mv = mod_bounds;
-    mv.removeFromTop(28);          /* section title */
     mv.removeFromBottom(6);
-    mod_viewport.setBounds(mv);    /* no horizontal padding: cards span the width */
+    mod_viewport.setBounds(mv);    /* no title, no horizontal padding: cards align to the top */
 
     layout_cards();
 }
@@ -408,12 +407,14 @@ void NewGui::lay_out_mix(
         std::vector<Knob*>& knobs_
 ) {
     juce::Rectangle<int> inner = panel.reduced(10);
-    inner.removeFromTop(18);
 
+    /* MODE selector pinned to the bottom with matching padding. */
     if (mode != nullptr) {
-        mode->setBounds(inner.removeFromTop(40));
-        inner.removeFromTop(8);
+        mode->setBounds(inner.removeFromBottom(40));
     }
+
+    /* A little top padding so the MIX knob isn't cramped against the top. */
+    inner.removeFromTop(10);
 
     int const cell_h = 72;
 
@@ -478,10 +479,8 @@ void NewGui::paint(juce::Graphics& g)
     );
 
     draw_panel(g, osc1_bounds, "OSC 1  (modulator)");
-    draw_section_title(g, mix_bounds, "MIX");   /* transparent: no box */
     draw_panel(g, osc2_bounds, "OSC 2  (carrier)");
-
-    draw_section_title(g, mod_bounds, "MODULATORS");   /* transparent: cards are the boxes */
+    /* MIX and MODULATORS are title-less, transparent sections. */
 
     if (cards.isEmpty()) {
         g.setColour(Theme::TEXT_FAINT);
