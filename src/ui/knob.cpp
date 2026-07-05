@@ -280,15 +280,21 @@ void Knob::update_assignment()
              * source's name and colour, not its pool slot. */
             mod_label = juce::String(Modulation::prefix(type)) + juce::String(slot);
             Synth::ControllerId src = Synth::ControllerId::NONE;
+            bool is_random = false;
 
             if (type == Modulation::MACRO) {
                 src = bridge.controller(Modulation::macro_in(slot));
                 if (src != Synth::ControllerId::NONE) {
                     mod_label = Modulation::source_short_name(src);
+                } else if (bridge.get_ratio(Modulation::macro_rnd(slot)) >= 0.99) {
+                    /* An intermediate macro with no input but full randomness is a
+                     * "Random" source. */
+                    mod_label = "Rnd";
+                    is_random = true;
                 }
             }
 
-            mod_colour = Modulation::assigned_colour(type, src);
+            mod_colour = is_random ? Theme::MACRO : Modulation::assigned_colour(type, src);
             read_base_depth();
         }
 
@@ -599,6 +605,8 @@ void Knob::open_assign_menu()
         for (int i = 0; i != KNOB_SOURCE_COUNT; ++i) {
             sources.addItem(200 + i, KNOB_SOURCES[i].name, have_macro);
         }
+        sources.addSeparator();
+        sources.addItem(300, "Random", have_macro);
         menu.addSubMenu("Modulate by  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
                         sources);
     }
@@ -633,6 +641,9 @@ void Knob::open_assign_menu()
                 slot = self->manager->assign_source(
                     self->param_id, (Synth::ControllerId)KNOB_SOURCES[result - 200].id, b
                 );
+            } else if (result == 300) {
+                type = Modulation::MACRO;
+                slot = self->manager->assign_random(self->param_id, b);
             }
 
             self->assign_mirrors(type, slot);

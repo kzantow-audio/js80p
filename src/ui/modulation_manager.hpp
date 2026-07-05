@@ -92,6 +92,18 @@ class ModulationManager
             double const base_ratio
         );
 
+        /**
+         * \brief Assign a "random" source to \c dest through a fresh intermediate
+         *        macro that has no input controller but full randomness
+         *        (macro_rnd = 1.0), so it emits random values within the
+         *        per-location range (its min/max). Returns the intermediate slot,
+         *        or 0 if the macro pool is exhausted.
+         */
+        int assign_random(
+            Synth::ParamId const dest,
+            double const base_ratio
+        );
+
         void unassign(Synth::ParamId const dest);
 
         /** Clear all grouping state (used when building a patch from scratch). */

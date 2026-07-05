@@ -155,6 +155,7 @@ namespace Modulation
     inline Synth::ParamId macro_in (int const i) { return pid(130 + 7 * (i - 1)); }
     inline Synth::ParamId macro_min(int const i) { return pid(131 + 7 * (i - 1)); }
     inline Synth::ParamId macro_max(int const i) { return pid(132 + 7 * (i - 1)); }
+    inline Synth::ParamId macro_rnd(int const i) { return pid(135 + 7 * (i - 1)); }
 
     /* ---- Per-destination range: base parameter(s) and depth (top) parameter.
      *      base = env INI/SUS/FIN or LFO/macro MIN; depth target = env PK or
