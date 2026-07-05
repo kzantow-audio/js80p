@@ -285,8 +285,11 @@ void Knob::read_base_depth()
       : mod_type == Modulation::LFO ? Modulation::lfo_min(mod_slot)
       : Modulation::macro_min(mod_slot);
 
+    /* depth is a delta in *visual* (skewed) space, so the modulation reach keeps
+     * a constant visual distance on exponential knobs regardless of the base. */
     base = bridge.get_ratio(base_param);
-    depth = bridge.get_ratio(Modulation::depth_param(mod_type, mod_slot)) - base;
+    depth = ratio_to_visual(bridge.get_ratio(Modulation::depth_param(mod_type, mod_slot)))
+        - ratio_to_visual(base);
 }
 
 
@@ -305,8 +308,8 @@ void Knob::apply_base(double const b)
         bridge.set_ratio(Modulation::macro_min(mod_slot), base);
     }
 
-    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot),
-                     juce::jlimit(0.0, 1.0, base + depth));
+    double const target = juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth);
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), visual_to_ratio(target));
     repaint();
 }
 
@@ -314,8 +317,8 @@ void Knob::apply_base(double const b)
 void Knob::apply_depth(double const d)
 {
     depth = juce::jlimit(-1.0, 1.0, d);
-    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot),
-                     juce::jlimit(0.0, 1.0, base + depth));
+    double const target = juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth);
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), visual_to_ratio(target));
     repaint();
 }
 
@@ -453,8 +456,9 @@ void Knob::paint(juce::Graphics& g)
         return;
     }
 
-    /* Outer reach ring: base -> base+depth (shows sign, direction, target). */
-    float const target = (float)ratio_to_visual(juce::jlimit(0.0, 1.0, base + depth));
+    /* Outer reach ring: base -> base+depth in visual space, so the reach length
+     * is constant for a given amount even on exponential knobs. */
+    float const target = (float)juce::jlimit(0.0, 1.0, position + depth);
     float const target_angle = angle_of(target);
     float const rr = r + 3.0f;
     float const a0 = juce::jmin(pos_angle, target_angle);
@@ -472,7 +476,9 @@ void Knob::paint(juce::Graphics& g)
     /* The badge itself is drawn by the free-floating ModBadge (see update_badge). */
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
-    double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
+    double const shown = dragging_depth
+        ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth))
+        : base;
     g.setColour(dragging_depth ? active : Theme::TEXT);
     g.setFont(11.0f);
     g.drawText(format_ratio(shown), value_area, juce::Justification::centred, false);
