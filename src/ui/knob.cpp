@@ -278,8 +278,8 @@ juce::Rectangle<float> Knob::badge_rect() const
     float const h = 12.0f;
     float const rr = kb.getWidth() * 0.5f + 3.0f;
     float const diag = 0.7071f;
-    float x = kb.getCentreX() + diag * rr;
-    float y = kb.getCentreY() - diag * rr - h;
+    float x = kb.getCentreX() + diag * rr + 3.0f;
+    float y = kb.getCentreY() - diag * rr - h + 3.0f;
     x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), x);
     y = juce::jmax(0.0f, y);
     return juce::Rectangle<float>(x, y, w, h);

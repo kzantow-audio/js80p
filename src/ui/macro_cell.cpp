@@ -115,8 +115,8 @@ juce::Rectangle<float> MacroCell::badge_rect() const
     float const h = 13.0f;
     float const rr = kb.getWidth() * 0.5f + 3.0f;
     float const diag = 0.7071f;
-    float x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), kb.getCentreX() + diag * rr);
-    float y = juce::jmax(0.0f, kb.getCentreY() - diag * rr - h);
+    float x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), kb.getCentreX() + diag * rr + 3.0f);
+    float y = juce::jmax(0.0f, kb.getCentreY() - diag * rr - h + 3.0f);
     return juce::Rectangle<float>(x, y, w, h);
 }
 
