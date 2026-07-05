@@ -28,6 +28,7 @@
 #include "js80p.hpp"
 #include "synth.hpp"
 
+#include "ui/knob.hpp"
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
@@ -58,8 +59,12 @@ class ModulatorCard : public juce::Component
 
         void paint(juce::Graphics& g) override;
         void resized() override;
+        void mouseDown(juce::MouseEvent const& event) override;
 
     private:
+        void set_expanded(bool const expanded);
+        void toggle_sync();
+
         ParamBridge& bridge;
         Modulation::Type type;
         int rep;
@@ -67,8 +72,12 @@ class ModulatorCard : public juce::Component
         std::vector<Synth::ParamId> destinations;
         std::vector<std::pair<int, Synth::ParamId>> connections;
 
-        juce::OwnedArray<VSlider> sliders;
-        std::unique_ptr<WaveformSelector> wave;
+        juce::OwnedArray<VSlider> sliders;   /* envelope A/H/D/R */
+        juce::OwnedArray<Knob> knobs;        /* LFO rate/phase/dist/rand */
+        std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
+        std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */
+        bool lfo_expanded;
+        juce::Rectangle<int> sync_bounds;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorCard)
 };

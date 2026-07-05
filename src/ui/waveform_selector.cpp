@@ -59,10 +59,17 @@ WaveformSelector::WaveformSelector(
         ParamBridge& bridge, Synth::ParamId const param_id
 ) : bridge(bridge),
     param_id(param_id),
-    selected(bridge.get_discrete(param_id))
+    selected(bridge.get_discrete(param_id)),
+    count(juce::jlimit(1, SHAPE_COUNT, bridge.option_count(param_id))),
+    single(false)
 {
     setWantsKeyboardFocus(false);
 }
+
+
+void WaveformSelector::set_single(bool const on) { single = on; repaint(); }
+void WaveformSelector::set_on_click(std::function<void()> cb) { on_click = std::move(cb); }
+void WaveformSelector::set_on_select(std::function<void(int)> cb) { on_select = std::move(cb); }
 
 
 void WaveformSelector::refresh()
@@ -121,7 +128,18 @@ void WaveformSelector::draw_glyph(
 
 void WaveformSelector::paint(juce::Graphics& g)
 {
-    for (int i = 0; i != SHAPE_COUNT; ++i) {
+    if (single) {
+        juce::Rectangle<float> const cell = getLocalBounds().toFloat().reduced(1.0f);
+        g.setColour(Theme::INSET);
+        g.fillRoundedRectangle(cell, 3.0f);
+        g.setColour(Theme::EDGE);
+        g.drawRoundedRectangle(cell, 3.0f, 1.0f);
+        g.setColour(Theme::ACCENT);
+        draw_glyph(g, cell.reduced(5.0f), selected);
+        return;
+    }
+
+    for (int i = 0; i != count; ++i) {
         juce::Rectangle<int> const cell = cell_bounds(i).reduced(2);
         bool const is_selected = (i == selected);
 
@@ -141,14 +159,25 @@ void WaveformSelector::paint(juce::Graphics& g)
 
 void WaveformSelector::mouseDown(juce::MouseEvent const& event)
 {
+    if (single) {
+        if (on_click) {
+            on_click();
+        }
+        return;
+    }
+
     int const col = event.x / juce::jmax(1, getWidth() / COLUMNS);
     int const row = event.y / juce::jmax(1, getHeight() / ROWS);
     int const index = row * COLUMNS + col;
 
-    if (index >= 0 && index < SHAPE_COUNT) {
+    if (index >= 0 && index < count) {
         selected = index;
         bridge.set_discrete(param_id, index);
         repaint();
+
+        if (on_select) {
+            on_select(index);
+        }
     }
 }
 

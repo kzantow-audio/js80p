@@ -31,7 +31,8 @@ ModulatorCard::ModulatorCard(
     rep(group.rep),
     members(group.members),
     destinations(group.destinations),
-    connections(group.connections)
+    connections(group.connections),
+    lfo_expanded(false)
 {
     setWantsKeyboardFocus(false);
 
@@ -58,20 +59,53 @@ ModulatorCard::ModulatorCard(
         sliders.add(rel);
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
+        wave->set_single(true);
+        wave->set_on_click([this] { set_expanded(true); });
         addAndMakeVisible(*wave);
-        sliders.add(new VSlider(bridge, build(Modulation::lfo_frq), "RATE"));
-        sliders.add(new VSlider(bridge, build(Modulation::lfo_phs), "PHS"));
+
+        shape_grid = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
+        shape_grid->set_on_select([this](int) { set_expanded(false); });
+        addChildComponent(*shape_grid);
+
+        knobs.add(new Knob(bridge, Modulation::lfo_frq(rep), "RATE"));
+        knobs.add(new Knob(bridge, Modulation::lfo_phs(rep), "PHS"));
+        knobs.add(new Knob(bridge, Modulation::lfo_dst(rep), "DIST"));
+        knobs.add(new Knob(bridge, Modulation::lfo_rnd(rep), "RAND"));
     }
 
     for (VSlider* const s : sliders) {
         addAndMakeVisible(s);
+    }
+
+    for (Knob* const k : knobs) {
+        addAndMakeVisible(k);
     }
 }
 
 
 int ModulatorCard::preferred_height() const
 {
-    return type == Modulation::LFO ? 118 : 104;
+    return type == Modulation::LFO ? 92 : 104;
+}
+
+
+void ModulatorCard::set_expanded(bool const expanded)
+{
+    lfo_expanded = expanded;
+    resized();
+    repaint();
+}
+
+
+void ModulatorCard::toggle_sync()
+{
+    int const on = bridge.get_discrete(Modulation::lfo_syn(rep)) != 0 ? 0 : 1;
+
+    for (int m : members) {
+        bridge.set_discrete(Modulation::lfo_syn(m), on);
+    }
+
+    repaint();
 }
 
 
@@ -109,8 +143,16 @@ void ModulatorCard::refresh()
         s->refresh();
     }
 
+    for (Knob* const k : knobs) {
+        k->refresh();
+    }
+
     if (wave != nullptr) {
         wave->refresh();
+    }
+
+    if (shape_grid != nullptr) {
+        shape_grid->refresh();
     }
 }
 
@@ -120,9 +162,32 @@ void ModulatorCard::resized()
     juce::Rectangle<int> b = getLocalBounds().reduced(6);
     b.removeFromTop(16);   /* one-line header */
 
-    if (wave != nullptr) {
-        wave->setBounds(b.removeFromTop(40));
-        b.removeFromTop(4);
+    if (type == Modulation::LFO) {
+        if (lfo_expanded) {
+            shape_grid->setBounds(b);
+            shape_grid->setVisible(true);
+            wave->setVisible(false);
+            for (Knob* const k : knobs) k->setVisible(false);
+            sync_bounds = {};
+            return;
+        }
+
+        shape_grid->setVisible(false);
+        wave->setVisible(true);
+
+        juce::Rectangle<int> left = b.removeFromLeft(40);
+        wave->setBounds(left.removeFromTop(b.getHeight() - 16));
+        left.removeFromTop(2);
+        sync_bounds = left.removeFromTop(14);
+        b.removeFromLeft(6);
+
+        int const n = knobs.size();
+        int const cell = n > 0 ? b.getWidth() / n : 0;
+        for (int i = 0; i != n; ++i) {
+            knobs[i]->setVisible(true);
+            knobs[i]->setBounds(b.getX() + i * cell, b.getY(), cell, b.getHeight());
+        }
+        return;
     }
 
     int const n = sliders.size();
@@ -132,6 +197,14 @@ void ModulatorCard::resized()
         for (int i = 0; i != n; ++i) {
             sliders[i]->setBounds(b.getX() + i * cell, b.getY(), cell - 3, b.getHeight());
         }
+    }
+}
+
+
+void ModulatorCard::mouseDown(juce::MouseEvent const& event)
+{
+    if (type == Modulation::LFO && !lfo_expanded && sync_bounds.contains(event.getPosition())) {
+        toggle_sync();
     }
 }
 
@@ -167,6 +240,16 @@ void ModulatorCard::paint(juce::Graphics& g)
         g.setColour(Theme::TEXT_DIM);
         g.drawText(dest, x, 3, right - x, 14, juce::Justification::centredLeft, false);
         x += (int)juce::GlyphArrangement::getStringWidth(df, dest) + 10;
+    }
+
+    /* LFO tempo-sync toggle (collapsed view only). */
+    if (type == Modulation::LFO && !lfo_expanded && !sync_bounds.isEmpty()) {
+        bool const on = bridge.get_discrete(Modulation::lfo_syn(rep)) != 0;
+        g.setColour(on ? Theme::LFO.withAlpha(0.35f) : Theme::INSET);
+        g.fillRoundedRectangle(sync_bounds.toFloat(), 2.0f);
+        g.setColour(on ? Theme::LFO : Theme::TEXT_DIM);
+        g.setFont(9.0f);
+        g.drawText("BPM", sync_bounds, juce::Justification::centred, false);
     }
 }
 

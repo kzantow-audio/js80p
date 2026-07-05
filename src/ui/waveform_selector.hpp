@@ -19,6 +19,8 @@
 #ifndef JS80P__UI__WAVEFORM_SELECTOR_HPP
 #define JS80P__UI__WAVEFORM_SELECTOR_HPP
 
+#include <functional>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
@@ -43,6 +45,11 @@ class WaveformSelector : public juce::Component
 
         WaveformSelector(ParamBridge& bridge, Synth::ParamId const param_id);
 
+        /** Collapsed mode: draw only the current shape as one button. */
+        void set_single(bool const on);
+        void set_on_click(std::function<void()> cb);
+        void set_on_select(std::function<void(int)> cb);
+
         void refresh();
 
         void paint(juce::Graphics& g) override;
@@ -60,6 +67,10 @@ class WaveformSelector : public juce::Component
         ParamBridge& bridge;
         Synth::ParamId const param_id;
         int selected;
+        int count;
+        bool single;
+        std::function<void()> on_click;
+        std::function<void(int)> on_select;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformSelector)
 };
