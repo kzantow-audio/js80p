@@ -82,6 +82,9 @@ class Knob : public juce::Component
 
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
+        static constexpr float RING_BAND = 10.0f;   /* clickable band outside the circle */
+
+        bool over_ring(juce::Point<float> const p) const;
 
         /**
          * \brief Position the free-floating badge component (a sibling brought to

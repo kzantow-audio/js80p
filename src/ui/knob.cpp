@@ -568,13 +568,20 @@ void Knob::open_assign_menu()
 
 bool Knob::hitTest(int x, int y)
 {
-    /* Only the modulation-ring column is clickable - the knob's cell is wider
-     * than the control, and that invisible margin must not swallow clicks meant
-     * for a neighbour's badge or control. Left/right bound = the ring radius. */
+    /* Clickable region = the knob circle plus a ring band around it (where the
+     * modulation arc is drawn). Circular and tight, so the cell's corners fall
+     * through and don't swallow a neighbour's badge/control. Inside the circle
+     * drags the base value; the ring band drags the modulation amount. */
     juce::Rectangle<float> const kb = knob_circle();
-    float const rr = kb.getWidth() * 0.5f + 3.0f;
-    float const cx = kb.getCentreX();
-    return (float)x >= cx - rr && (float)x <= cx + rr;
+    float const reach = kb.getWidth() * 0.5f + RING_BAND;
+    return kb.getCentre().getDistanceFrom(juce::Point<float>((float)x, (float)y)) <= reach;
+}
+
+
+bool Knob::over_ring(juce::Point<float> const p) const
+{
+    juce::Rectangle<float> const kb = knob_circle();
+    return kb.getCentre().getDistanceFrom(p) > kb.getWidth() * 0.5f;
 }
 
 
@@ -586,7 +593,14 @@ void Knob::mouseDown(juce::MouseEvent const& event)
     }
 
     dragging = true;
-    drag_start_visual = ratio_to_visual(assigned ? base : ratio);
+
+    if (assigned && over_ring(event.position)) {
+        dragging_depth = true;
+        drag_start_depth = depth;
+    } else {
+        dragging_depth = false;
+        drag_start_visual = ratio_to_visual(assigned ? base : ratio);
+    }
 }
 
 
@@ -595,6 +609,11 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
     double const sensitivity =
         event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
+
+    if (dragging_depth) {
+        apply_depth(drag_start_depth + delta);
+        return;
+    }
 
     double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
 
@@ -615,14 +634,24 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
 
 void Knob::mouseUp(juce::MouseEvent const& /* event */)
 {
+    bool const was_depth = dragging_depth;
     dragging = false;
+    dragging_depth = false;
+
+    if (was_depth) {
+        repaint();   /* revert the below-knob readout from amount to line value */
+    }
 }
 
 
 void Knob::mouseDoubleClick(juce::MouseEvent const& event)
 {
     if (assigned) {
-        apply_base(bridge.get_default_ratio(param_id));   /* reset base (badge resets depth) */
+        if (over_ring(event.position)) {
+            apply_depth(0.0);   /* ring band: reset the modulation amount */
+        } else {
+            apply_base(bridge.get_default_ratio(param_id));   /* body: reset base */
+        }
         return;
     }
 
