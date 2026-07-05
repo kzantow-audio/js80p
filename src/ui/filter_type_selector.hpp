@@ -41,7 +41,12 @@ class FilterTypeSelector : public juce::Component
     public:
         static constexpr int COUNT = 7;
 
-        FilterTypeSelector(ParamBridge& bridge, Synth::ParamId const param_id);
+        /** \p columns lays the icons out in a grid (default: a single row). */
+        FilterTypeSelector(
+            ParamBridge& bridge,
+            Synth::ParamId const param_id,
+            int const columns = COUNT
+        );
 
         void refresh();
 
@@ -55,6 +60,7 @@ class FilterTypeSelector : public juce::Component
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
+        int const columns;
         int selected;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterTypeSelector)

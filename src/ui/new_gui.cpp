@@ -40,6 +40,15 @@ static juce::StringArray const TUNINGS {
 };
 
 
+/* Note-handling / polyphony modes (Synth::ParamId::NH), matching the order of
+ * the engine's NOTE_HANDLING_* constants. */
+static juce::StringArray const POLY_MODES {
+    "MONO", "M HOLD", "M IS", "M H IS",
+    "POLY", "P HOLD", "P IS", "P H IS",
+    "P RET", "P H RET", "P H R IS"
+};
+
+
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
     manager(bridge),
@@ -50,6 +59,7 @@ NewGui::NewGui(Synth& synth)
     osc2_wave(nullptr),
     mode_selector(nullptr),
     tuning_selector(nullptr),
+    poly_selector(nullptr),
     osc1_filters(nullptr),
     osc2_filters(nullptr),
     osc1_type(nullptr),
@@ -109,6 +119,8 @@ NewGui::NewGui(Synth& synth)
      * tuning, applies the choice to both oscillators via the mirror param. */
     tuning_selector = add_selector(Synth::ParamId::MTUN, TUNINGS, "TUNING");
     tuning_selector->set_mirror(Synth::ParamId::CTUN);
+    /* Polyphony / note-handling selector (above TUNING). */
+    poly_selector = add_selector(Synth::ParamId::NH, POLY_MODES, "POLY");
     add_knob(mix, Synth::ParamId::MIX, "MIX");
     add_knob(mix, Synth::ParamId::PM,  "PM");
     add_knob(mix, Synth::ParamId::FM,  "FM");
@@ -126,7 +138,10 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc2, Synth::ParamId::CPRT, "PRT");
     add_knob(osc2, Synth::ParamId::CN,   "NOISE");
     add_knob(osc2, Synth::ParamId::CFLD, "FOLD");
-    add_knob(osc2, Synth::ParamId::CDL,  "DIST");
+    add_knob(osc2, Synth::ParamId::CDL,   "DIST");
+    /* Carrier distortion type: shown as a knob stepping through the types,
+     * sitting next to the DIST (level) knob. */
+    add_knob(osc2, Synth::ParamId::CDTYP, "TYPE");
     osc2_filters = add_filters(
         { Synth::ParamId::CF1TYP, Synth::ParamId::CF1FRQ, Synth::ParamId::CF1Q, Synth::ParamId::CF1G },
         { Synth::ParamId::CF2TYP, Synth::ParamId::CF2FRQ, Synth::ParamId::CF2Q, Synth::ParamId::CF2G },
@@ -453,7 +468,7 @@ void NewGui::resized()
     area.reduce(5, 5);
 
     int const gap = 5;
-    int const filter_height = 150;
+    int const filter_height = 114;
 
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
@@ -485,7 +500,7 @@ void NewGui::resized()
     osc2_filters->setBounds(osc2_filter_bounds);
 
     lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
-    lay_out_mix(mix_bounds, mode_selector, tuning_selector, mix);
+    lay_out_mix(mix_bounds, mode_selector, tuning_selector, poly_selector, mix);
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
 
     /* Two tiny pie dots right-aligned in each oscillator's title row,
@@ -553,19 +568,25 @@ void NewGui::lay_out_mix(
         juce::Rectangle<int> panel,
         Selector* mode,
         Selector* tuning,
+        Selector* poly,
         std::vector<Knob*>& knobs_
 ) {
     juce::Rectangle<int> inner = panel.reduced(10);
 
-    /* MODE selector pinned to the bottom with matching padding. */
+    /* Selectors stack up from the bottom: MODE, then TUNING, then POLY, so from
+     * the top the column reads MIX / PM / FM / AM / POLY / TUNING / MODE. */
     if (mode != nullptr) {
         mode->setBounds(inner.removeFromBottom(40));
     }
 
-    /* TUNING selector directly above MODE, same width and matching spacing. */
     if (tuning != nullptr) {
         inner.removeFromBottom(8);
         tuning->setBounds(inner.removeFromBottom(40));
+    }
+
+    if (poly != nullptr) {
+        inner.removeFromBottom(8);
+        poly->setBounds(inner.removeFromBottom(40));
     }
 
     /* A little top padding so the MIX knob isn't cramped against the top. */
@@ -663,6 +684,26 @@ void NewGui::paint(juce::Graphics& g)
     draw_panel(g, osc1_panel_bounds, "OSC 1  (modulator)");
     draw_panel(g, osc2_panel_bounds, "OSC 2  (carrier)");
     /* MIX and MODULATORS are title-less, transparent sections. */
+
+    /* Signal-flow hint: two small right-pointing triangles in the mix column,
+     * one hugging OSC 1 (flow into the mix knobs) and one hugging OSC 2 (flow
+     * out to the carrier). */
+    {
+        float const h = 16.0f;
+        float const w = h * 0.62f;
+        float const cy = (float)mix_bounds.getCentreY();
+        auto arrow = [&g, h, w, cy](float const cx) {
+            juce::Path tri;
+            tri.startNewSubPath(cx - w * 0.5f, cy - h * 0.5f);
+            tri.lineTo(cx + w * 0.5f, cy);
+            tri.lineTo(cx - w * 0.5f, cy + h * 0.5f);
+            tri.closeSubPath();
+            g.fillPath(tri);
+        };
+        g.setColour(Theme::TEXT_DIM);
+        arrow((float)mix_bounds.getX() + w * 0.5f + 2.0f);
+        arrow((float)mix_bounds.getRight() - w * 0.5f - 2.0f);
+    }
 
     if (cards.isEmpty()) {
         g.setColour(Theme::TEXT_FAINT);

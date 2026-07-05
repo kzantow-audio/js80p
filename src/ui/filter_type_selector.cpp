@@ -49,9 +49,10 @@ static float const* filter_glyph_points(int const type, int& point_count)
 
 
 FilterTypeSelector::FilterTypeSelector(
-        ParamBridge& bridge, Synth::ParamId const param_id
+        ParamBridge& bridge, Synth::ParamId const param_id, int const columns
 ) : bridge(bridge),
     param_id(param_id),
+    columns(juce::jlimit(1, COUNT, columns)),
     selected(bridge.get_discrete(param_id))
 {
     setWantsKeyboardFocus(false);
@@ -96,12 +97,15 @@ void FilterTypeSelector::draw_glyph(
 
 void FilterTypeSelector::paint(juce::Graphics& g)
 {
-    int const w = getWidth() / COUNT;
-    int const h = getHeight();
+    int const rows = (COUNT + columns - 1) / columns;
+    int const w = getWidth() / columns;
+    int const h = getHeight() / rows;
 
     for (int i = 0; i != COUNT; ++i) {
+        int const col = i % columns;
+        int const row = i / columns;
         juce::Rectangle<int> const cell =
-            juce::Rectangle<int>(i * w, 0, w, h).reduced(2);
+            juce::Rectangle<int>(col * w, row * h, w, h).reduced(2);
         bool const is_selected = (i == selected);
 
         g.setColour(is_selected ? Theme::PANEL_2 : Theme::INSET);
@@ -120,9 +124,12 @@ void FilterTypeSelector::paint(juce::Graphics& g)
 
 void FilterTypeSelector::mouseDown(juce::MouseEvent const& event)
 {
-    int const index = event.x / juce::jmax(1, getWidth() / COUNT);
+    int const rows = (COUNT + columns - 1) / columns;
+    int const col = event.x / juce::jmax(1, getWidth() / columns);
+    int const row = event.y / juce::jmax(1, getHeight() / rows);
+    int const index = row * columns + col;
 
-    if (index >= 0 && index < COUNT) {
+    if (col >= 0 && col < columns && index >= 0 && index < COUNT) {
         selected = index;
         bridge.set_discrete(param_id, index);
         repaint();

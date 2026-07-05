@@ -81,12 +81,14 @@ void DotControl::paint(juce::Graphics& g)
 
     double const v = juce::jlimit(0.0, 1.0, ratio);
 
-    /* Radial pie fill, sweeping clockwise from 12 o'clock; a solid disc at 1. */
+    /* Radial pie fill, sweeping clockwise from 6 o'clock (bottom); a solid disc
+     * at 1. */
     if (v > 1.0e-3) {
+        float const start = juce::MathConstants<float>::pi;
         juce::Path pie;
         pie.addPieSegment(
             cx - r, cy - r, d, d,
-            0.0f, juce::MathConstants<float>::twoPi * (float)v, 0.0f
+            start, start + juce::MathConstants<float>::twoPi * (float)v, 0.0f
         );
         g.setColour(Theme::ACCENT);
         g.fillPath(pie);

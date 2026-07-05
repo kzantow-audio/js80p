@@ -36,7 +36,8 @@ namespace JS80P
  * \brief A tiny "pie-fill" dot bound to one Synth parameter, sized to sit across
  *        from a section title (~12-13px). It draws an unfilled circle outline at
  *        value 0 and fills with a radial pie sweeping clockwise from the top as
- *        the value rises, becoming a solid disc at 1. Vertical drag changes the
+ *        the value rises (starting at the bottom / 6 o'clock), becoming a solid
+ *        disc at 1. Vertical drag changes the
  *        value (same sensitivity as Knob; Ctrl = fine); double-click resets to
  *        the parameter default. Optional mirrors receive the same value on every
  *        change (grouped copies, like Knob::set_mirrors).

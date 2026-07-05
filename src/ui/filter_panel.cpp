@@ -41,7 +41,7 @@ FilterPanel::FilterPanel(
     Spec const specs[2] = { a, b };
 
     for (int f = 0; f != 2; ++f) {
-        FilterTypeSelector* const type = new FilterTypeSelector(bridge, specs[f].type);
+        FilterTypeSelector* const type = new FilterTypeSelector(bridge, specs[f].type, 2);
         types.add(type);
         addChildComponent(type);
 
@@ -101,22 +101,22 @@ void FilterPanel::resized()
     seg_a_bounds = juce::Rectangle<int>(seg_b_bounds.getX() - seg_w - 3, header.getY() + 1, seg_w, seg_h);
 
     b.removeFromTop(4);
-    /* Match one row of the oscillator waveform selector (40px / 2 rows). */
-    juce::Rectangle<int> const type_row = b.removeFromTop(20);
-    b.removeFromTop(6);
 
-    /* FREQ stays large (left, full height); Q and GAIN match the oscillator
-     * knob size (a quarter of the panel width, 72px tall). */
-    int const small_w = b.getWidth() / 4;
-    int const small_h = 72;
-    int const freq_w = b.getWidth() - 2 * small_w;
-    int const small_y = b.getY() + (b.getHeight() - small_h) / 2;
+    /* One compact row: a 2-column type-selector block on the left, then the
+     * CUTOFF / Q / GAIN knobs (each an oscillator-knob cell, 72px tall). */
+    int const row_h = 72;
+    juce::Rectangle<int> row = b.removeFromTop(row_h);
+
+    juce::Rectangle<int> const type_area = row.removeFromLeft(46);
+    row.removeFromLeft(4);
+
+    int const knob_w = row.getWidth() / 3;
 
     for (int f = 0; f != 2; ++f) {
-        types[f]->setBounds(type_row);
-        knobs[f * 3 + 0]->setBounds(b.getX(), b.getY(), freq_w, b.getHeight());
-        knobs[f * 3 + 1]->setBounds(b.getX() + freq_w, small_y, small_w, small_h);
-        knobs[f * 3 + 2]->setBounds(b.getX() + freq_w + small_w, small_y, small_w, small_h);
+        types[f]->setBounds(type_area);
+        knobs[f * 3 + 0]->setBounds(row.getX(), row.getY(), knob_w, row_h);
+        knobs[f * 3 + 1]->setBounds(row.getX() + knob_w, row.getY(), knob_w, row_h);
+        knobs[f * 3 + 2]->setBounds(row.getX() + 2 * knob_w, row.getY(), knob_w, row_h);
     }
 }
 

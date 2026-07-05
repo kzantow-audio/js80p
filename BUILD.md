@@ -17,12 +17,17 @@ legacy `Makefile`.
 - **Two pages** via SYNTH / EFFECTS tabs centered in the header.
   - *Synth page*: header + macro strip (macros 1-8 with per-macro MIDI-CC source) +
     OSC 1 / MIX / OSC 2 columns + a right-third scrollable Modulators panel.
-    - Each oscillator column is one panel that also contains its two filters at the
-      bottom. MIX and MODULATORS are title-less transparent sections.
-    - A single combined **TUNING** selector (above MODE) applies to both oscillators
-      and reads OSC 1 on load.
+    - Each oscillator column is one panel that also contains its two compact
+      filters at the bottom (a 2-column filter-type glyph grid then CUTOFF / Q /
+      GAIN). OSC 2 additionally exposes its distortion TYPE as a knob beside DIST.
+      MIX and MODULATORS are title-less transparent sections; the MIX column shows
+      two small signal-flow triangles (OSC 1 → mix knobs → OSC 2).
+    - The MIX column stacks MIX / PM / FM / AM knobs over **POLY** (note handling),
+      a combined **TUNING** selector, and **MODE**. TUNING and POLY apply to both
+      oscillators / the whole synth and read their live value on load.
     - Two tiny pie-fill dot controls on each OSC title (oscillator inaccuracy /
-      instability) and on each envelope card title (time / level inaccuracy).
+      instability) and on each envelope card title (time / level inaccuracy); each
+      fills clockwise from the bottom.
   - *Effects page*: recreates the original effects chain (Input, Vol 1-3, Dist 1/2,
     Filter 1/2, Tape, Chorus, Echo, Reverb) as panels of knobs; type selectors are
     rendered as knobs; no LG toggles.
