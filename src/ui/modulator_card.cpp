@@ -60,6 +60,7 @@ ModulatorCard::ModulatorCard(
         for (Knob* const k : knobs) {
             k->set_manager(&manager);
             k->set_mod_caps(Modulation::CAP_MACRO);   /* envelope params: macros only */
+            k->set_center_value(1.0);   /* time knobs: exponential, 1 second midpoint */
         }
 
         curves.add(new CurveSelector(bridge, build_curve(Modulation::env_ash), false));
