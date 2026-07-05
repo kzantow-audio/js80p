@@ -45,16 +45,27 @@ class Selector : public juce::Component
             juce::String caption
         );
 
+        /**
+         * \brief Also write the selected index to \p mirror_param_id on every
+         *        selection, while this Selector keeps reading/refreshing from
+         *        its primary param. Used to drive two params (e.g. both
+         *        oscillators' tuning) from a single control.
+         */
+        void set_mirror(Synth::ParamId const mirror_param_id);
+
         void refresh();
 
         void paint(juce::Graphics& g) override;
         void mouseDown(juce::MouseEvent const& event) override;
 
     private:
+        static constexpr Synth::ParamId NO_MIRROR = Synth::ParamId::INVALID_PARAM_ID;
+
         juce::String option_label(int const index) const;
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
+        Synth::ParamId mirror_param_id;
         juce::StringArray const options;
         juce::String const caption;
         int selected;

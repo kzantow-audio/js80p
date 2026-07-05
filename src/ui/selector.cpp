@@ -31,11 +31,18 @@ Selector::Selector(
         juce::String caption
 ) : bridge(bridge),
     param_id(param_id),
+    mirror_param_id(NO_MIRROR),
     options(std::move(options)),
     caption(std::move(caption)),
     selected(bridge.get_discrete(param_id))
 {
     setWantsKeyboardFocus(false);
+}
+
+
+void Selector::set_mirror(Synth::ParamId const mirror_param_id)
+{
+    this->mirror_param_id = mirror_param_id;
 }
 
 
@@ -114,6 +121,11 @@ void Selector::mouseDown(juce::MouseEvent const& /* event */)
             if (result > 0) {
                 self->selected = result - 1;
                 self->bridge.set_discrete(self->param_id, self->selected);
+
+                if (self->mirror_param_id != NO_MIRROR) {
+                    self->bridge.set_discrete(self->mirror_param_id, self->selected);
+                }
+
                 self->repaint();
             }
         }

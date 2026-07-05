@@ -32,6 +32,14 @@ static juce::StringArray const MODES {
 };
 
 
+static juce::StringArray const TUNINGS {
+    "440 12TET",
+    "432 12TET",
+    "C MTS-ESP",
+    "N MTS-ESP"
+};
+
+
 NewGui::NewGui(Synth& synth)
     : bridge(synth),
     manager(bridge),
@@ -39,6 +47,7 @@ NewGui::NewGui(Synth& synth)
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
+    tuning_selector(nullptr),
     osc1_filters(nullptr),
     osc2_filters(nullptr),
     osc1_type(nullptr),
@@ -83,6 +92,10 @@ NewGui::NewGui(Synth& synth)
 
     /* Mix column. */
     mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
+    /* Single combined per-oscillator tuning: reads/displays OSC 1 (modulator)
+     * tuning, applies the choice to both oscillators via the mirror param. */
+    tuning_selector = add_selector(Synth::ParamId::MTUN, TUNINGS, "TUNING");
+    tuning_selector->set_mirror(Synth::ParamId::CTUN);
     add_knob(mix, Synth::ParamId::MIX, "MIX");
     add_knob(mix, Synth::ParamId::PM,  "PM");
     add_knob(mix, Synth::ParamId::FM,  "FM");
@@ -355,7 +368,7 @@ void NewGui::resized()
     osc2_filters->setBounds(osc2_filter_bounds);
 
     lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
-    lay_out_mix(mix_bounds, mode_selector, mix);
+    lay_out_mix(mix_bounds, mode_selector, tuning_selector, mix);
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
 
     juce::Rectangle<int> mv = mod_bounds;
@@ -408,6 +421,7 @@ void NewGui::lay_out_osc(
 void NewGui::lay_out_mix(
         juce::Rectangle<int> panel,
         Selector* mode,
+        Selector* tuning,
         std::vector<Knob*>& knobs_
 ) {
     juce::Rectangle<int> inner = panel.reduced(10);
@@ -415,6 +429,12 @@ void NewGui::lay_out_mix(
     /* MODE selector pinned to the bottom with matching padding. */
     if (mode != nullptr) {
         mode->setBounds(inner.removeFromBottom(40));
+    }
+
+    /* TUNING selector directly above MODE, same width and matching spacing. */
+    if (tuning != nullptr) {
+        inner.removeFromBottom(8);
+        tuning->setBounds(inner.removeFromBottom(40));
     }
 
     /* A little top padding so the MIX knob isn't cramped against the top. */

@@ -78,7 +78,7 @@ class NewGui : public juce::Component, private juce::Timer
             std::vector<Knob*>& main,
             PerTypeEditor* per_type
         );
-        void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, std::vector<Knob*>& knobs);
+        void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, Selector* tuning, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
         void draw_section_title(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
 
@@ -103,6 +103,7 @@ class NewGui : public juce::Component, private juce::Timer
         WaveformSelector* osc1_wave;
         WaveformSelector* osc2_wave;
         Selector* mode_selector;
+        Selector* tuning_selector;
         FilterPanel* osc1_filters;
         FilterPanel* osc2_filters;
         PerTypeEditor* osc1_type;
