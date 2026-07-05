@@ -89,7 +89,8 @@ ModulatorCard::ModulatorCard(
 
 int ModulatorCard::preferred_height() const
 {
-    return 90;
+    /* Match the oscillator knob size (cell height 72) + header + padding. */
+    return 100;
 }
 
 

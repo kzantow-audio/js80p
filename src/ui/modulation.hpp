@@ -171,6 +171,21 @@ namespace Modulation
         }
     }
 
+    /**
+     * \brief Colour for an assigned modulation, by source: envelope green, LFO
+     *        blue, a macro/CC/wheel-fed intermediate magenta, and a per-voice
+     *        "direct" source (velocity / note / aftertouch) orange.
+     */
+    inline juce::Colour assigned_colour(Type const type, Synth::ControllerId const macro_source)
+    {
+        if (type == ENVELOPE) return Theme::ENV;
+        if (type == LFO)      return Theme::LFO;
+
+        int const v = (int)macro_source;
+        if (v == 130 || v == 129 || v == 155) return Theme::MACRO;   /* vel/note/AT -> orange */
+        return Theme::MIDI;                                          /* macro/CC/wheel -> magenta */
+    }
+
     /** Short label for a modulation source controller (macro / MIDI / global). */
     inline juce::String source_short_name(Synth::ControllerId const id)
     {

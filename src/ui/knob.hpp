@@ -106,6 +106,7 @@ class Knob : public juce::Component
         Modulation::Type mod_type;
         int mod_slot;
         juce::String mod_label;   /* badge text: source name or slot */
+        juce::Colour mod_colour;  /* badge/ring colour by source type */
         double base;
         double depth;   /* signed: target = clamp(base + depth) */
 

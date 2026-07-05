@@ -142,16 +142,18 @@ void Knob::update_assignment()
             mod_slot = slot;
 
             /* An intermediate macro (input driven by a global source) shows the
-             * source's name, not its pool slot. */
+             * source's name and colour, not its pool slot. */
             mod_label = juce::String(Modulation::prefix(type)) + juce::String(slot);
+            Synth::ControllerId src = Synth::ControllerId::NONE;
 
             if (type == Modulation::MACRO) {
-                Synth::ControllerId const src = bridge.controller(Modulation::macro_in(slot));
+                src = bridge.controller(Modulation::macro_in(slot));
                 if (src != Synth::ControllerId::NONE) {
                     mod_label = Modulation::source_short_name(src);
                 }
             }
 
+            mod_colour = Modulation::assigned_colour(type, src);
             read_base_depth();
         }
 
@@ -266,13 +268,17 @@ juce::Rectangle<float> Knob::knob_circle() const
 
 juce::Rectangle<float> Knob::badge_rect() const
 {
-    /* The E#/L# label sits at the knob's top-right, clear of the circle. */
+    /* Lower-left corner sits on the reach ring at the top-right (45 deg), so the
+     * badge always meets the modulation-amount curve regardless of cell width. */
     juce::Rectangle<float> const kb = knob_circle();
-    float const w = 22.0f;
-    float const h = 13.0f;
-    float x = kb.getRight() + 6.0f;
-    x = juce::jmin(x, (float)getWidth() - w - 1.0f);
-    float const y = juce::jmax(0.0f, kb.getY() - 3.0f);
+    float const w = 20.0f;
+    float const h = 12.0f;
+    float const rr = kb.getWidth() * 0.5f + 3.0f;
+    float const diag = 0.7071f;
+    float x = kb.getCentreX() + diag * rr;
+    float y = kb.getCentreY() - diag * rr - h;
+    x = juce::jlimit(0.0f, (float)getWidth() - w, x);
+    y = juce::jmax(0.0f, y);
     return juce::Rectangle<float>(x, y, w, h);
 }
 
@@ -299,7 +305,7 @@ void Knob::paint(juce::Graphics& g)
     g.setColour(Theme::TRACK);
     g.strokePath(track, stroke);
 
-    juce::Colour const active = assigned ? Modulation::colour(mod_type) : Theme::ACCENT;
+    juce::Colour const active = assigned ? mod_colour : Theme::ACCENT;
     double const position = ratio_to_visual(assigned ? base : ratio);
     float const pos_angle = angle_of(position);
 
@@ -346,8 +352,8 @@ void Knob::paint(juce::Graphics& g)
     g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
     g.fillRoundedRectangle(badge, 3.0f);
     g.setColour(active);
-    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
-    g.drawText(mod_label, badge, juce::Justification::centred, false);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
+    g.drawText(mod_label, badge.reduced(2.0f, 0.0f), juce::Justification::centredLeft, false);
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
     double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;

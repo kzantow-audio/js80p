@@ -335,7 +335,9 @@ void NewGui::lay_out_osc(
     inner.removeFromTop(main_rows * cell_h + 6);
 
     if (per_type != nullptr) {
-        per_type->setBounds(inner);
+        /* Cap the per-type editor so the harmonics/pulse-width area doesn't grow
+         * unbounded on tall windows. */
+        per_type->setBounds(inner.removeFromTop(juce::jmin(inner.getHeight(), 150)));
     }
 }
 

@@ -105,10 +105,13 @@ juce::Rectangle<float> MacroCell::knob_circle() const
 juce::Rectangle<float> MacroCell::badge_rect() const
 {
     juce::Rectangle<float> const kb = knob_circle();
-    float const w = 26.0f;
-    float x = juce::jmin(kb.getRight() + 6.0f, (float)getWidth() - w - 1.0f);
-    float const y = juce::jmax(0.0f, kb.getY() - 3.0f);
-    return juce::Rectangle<float>(x, y, w, 13.0f);
+    float const w = 24.0f;
+    float const h = 13.0f;
+    float const rr = kb.getWidth() * 0.5f + 3.0f;
+    float const diag = 0.7071f;
+    float x = juce::jlimit(0.0f, (float)getWidth() - w, kb.getCentreX() + diag * rr);
+    float y = juce::jmax(0.0f, kb.getCentreY() - diag * rr - h);
+    return juce::Rectangle<float>(x, y, w, h);
 }
 
 
@@ -163,7 +166,8 @@ void MacroCell::paint(juce::Graphics& g)
     float const cx = kb.getCentreX();
     float const cy = kb.getCentreY();
     float const r = kb.getWidth() * 0.5f;
-    juce::Colour const active = Theme::MIDI;
+    juce::Colour const active =
+        Modulation::assigned_colour(Modulation::MACRO, bridge.controller(in_p));
 
     juce::PathStrokeType const stroke(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
 
@@ -205,10 +209,10 @@ void MacroCell::paint(juce::Graphics& g)
     juce::Rectangle<float> const badge = badge_rect();
 
     if (sourced) {
-        g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
+        /* Solid chip, no border when active. */
+        g.setColour(active.withAlpha(dragging_depth ? 0.45f : 0.28f));
         g.fillRoundedRectangle(badge, 3.0f);
         g.setColour(active);
-        g.drawRoundedRectangle(badge, 3.0f, 1.0f);
         g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
         g.drawText(source_label(), badge, juce::Justification::centred, false);
     } else {
