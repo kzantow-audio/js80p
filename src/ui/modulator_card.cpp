@@ -246,12 +246,17 @@ void ModulatorCard::resized()
     int const h = b.getHeight();
     int x = b.getX() + juce::jmax(0, (b.getWidth() - total) / 2);
 
+    /* Bottom of a knob's circle (mirrors Knob::knob_circle), so the curve
+     * squares line up with the base of the knobs, not the value text. */
+    int const circle = juce::jmin(kw - 4, h - 32);
+    int const circle_bottom = h / 2 + circle / 2 - 3;
+
     auto place_knob = [&](int const i) {
         knobs[i]->setBounds(x, b.getY(), kw, h);
         x += kw;
     };
     auto place_curve = [&](int const i) {
-        curves[i]->setBounds(x, b.getBottom() - cw, cw, cw);
+        curves[i]->setBounds(x, b.getY() + circle_bottom - cw, cw, cw);
         x += cw;
     };
 

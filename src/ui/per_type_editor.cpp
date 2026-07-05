@@ -83,9 +83,10 @@ void PerTypeEditor::refresh()
 
 void PerTypeEditor::resized()
 {
-    /* Pulse width: a single knob on the left. */
-    int const knob_w = juce::jmin(getWidth() / 4, 76);
-    pw_knob.setBounds(4, 0, knob_w, getHeight());
+    /* Pulse width: a single knob on the left, sized like the oscillator knobs
+     * (cell 72 high) rather than filling the whole per-type area. */
+    int const knob_w = juce::jmin(getWidth() / 4, 78);
+    pw_knob.setBounds(4, 0, knob_w, 72);
 }
 
 
