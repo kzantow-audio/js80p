@@ -232,8 +232,12 @@ void ModulatorCard::resized()
     b.removeFromTop(16);   /* one-line header */
 
     if (type == Modulation::LFO) {
+        int const bh = 20;   /* WAVE/BPM height = one oscillator selector button */
+
         if (lfo_expanded) {
-            shape_grid->setBounds(b);
+            /* Selector at the oscillator-button height (2 rows x 20px), not filling
+             * the card. */
+            shape_grid->setBounds(b.removeFromTop(2 * bh));
             shape_grid->setVisible(true);
             wave->setVisible(false);
             for (Knob* const k : knobs) k->setVisible(false);
@@ -244,17 +248,22 @@ void ModulatorCard::resized()
         shape_grid->setVisible(false);
         wave->setVisible(true);
 
-        juce::Rectangle<int> left = b.removeFromLeft(40);
-        wave->setBounds(left.removeFromTop(b.getHeight() - 16));
-        left.removeFromTop(2);
-        sync_bounds = left.removeFromTop(14);
-        b.removeFromLeft(6);
+        /* Row: WAVE | BPM | RATE | PHS | DIST | RAND. */
+        int const by = b.getY() + (b.getHeight() - bh) / 2;
+        int const wave_w = 36;
+        int const bpm_w = 30;
+        int x = b.getX();
+
+        wave->setBounds(x, by, wave_w, bh);
+        x += wave_w + 4;
+        sync_bounds = juce::Rectangle<int>(x, by, bpm_w, bh);
+        x += bpm_w + 6;
 
         int const n = knobs.size();
-        int const cell = n > 0 ? b.getWidth() / n : 0;
+        int const cell = n > 0 ? (b.getRight() - x) / n : 0;
         for (int i = 0; i != n; ++i) {
             knobs[i]->setVisible(true);
-            knobs[i]->setBounds(b.getX() + i * cell, b.getY(), cell, b.getHeight());
+            knobs[i]->setBounds(x + i * cell, b.getY(), cell, b.getHeight());
         }
         return;
     }
