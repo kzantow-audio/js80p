@@ -95,11 +95,12 @@ class ModBadge : public juce::Component
                 return;
             }
 
-            double const sensitivity = event.mods.isCtrlDown()
+            bool const fine = event.mods.isCtrlDown();
+            double const sensitivity = fine
                 ? Knob::DRAG_PIXELS_FULL_RANGE * 5.0 : Knob::DRAG_PIXELS_FULL_RANGE;
-            owner.apply_depth(
-                drag_start_depth - (double)event.getDistanceFromDragStartY() / sensitivity
-            );
+            double const raw = drag_start_depth
+                - (double)event.getDistanceFromDragStartY() / sensitivity;
+            owner.apply_depth(owner.snap_depth(raw, drag_start_depth, fine));
         }
 
         void mouseUp(juce::MouseEvent const& /* event */) override
@@ -187,6 +188,37 @@ double Knob::ratio_for_display(double const target) const
     }
 
     return 0.5 * (lo + hi);
+}
+
+
+double Knob::snap_ratio(double const raw_ratio, double const from_visual, bool const fine) const
+{
+    if (!semitone_snap || fine) {
+        return raw_ratio;
+    }
+
+    /* Snap the movement to whole semitones, keeping any fine offset. */
+    double const start_cents = bridge.display_value(param_id, visual_to_ratio(from_visual));
+    double const raw_cents = bridge.display_value(param_id, raw_ratio);
+    return ratio_for_display(start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0);
+}
+
+
+double Knob::snap_depth(double const raw_depth, double const from_depth, bool const fine) const
+{
+    if (!semitone_snap || fine) {
+        return raw_depth;
+    }
+
+    /* Snap the modulation target to the same semitone grid as the base, in
+     * visual space, then express it back as a visual depth. */
+    double const bvis = ratio_to_visual(base);
+    double const start_cents =
+        bridge.display_value(param_id, visual_to_ratio(juce::jlimit(0.0, 1.0, bvis + from_depth)));
+    double const raw_cents =
+        bridge.display_value(param_id, visual_to_ratio(juce::jlimit(0.0, 1.0, bvis + raw_depth)));
+    double const snapped = start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0;
+    return ratio_to_visual(ratio_for_display(snapped)) - bvis;
 }
 
 
@@ -612,29 +644,24 @@ void Knob::mouseDown(juce::MouseEvent const& event)
 
 void Knob::mouseDrag(juce::MouseEvent const& event)
 {
-    double const sensitivity =
-        event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
+    bool const fine = event.mods.isCtrlDown();
+    double const sensitivity = fine ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
 
     if (dragging_depth) {
-        apply_depth(drag_start_depth + delta);
+        apply_depth(snap_depth(drag_start_depth + delta, drag_start_depth, fine));
         return;
     }
 
-    double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
+    double const new_ratio = snap_ratio(
+        visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta)), drag_start_visual, fine
+    );
 
     if (assigned) {
         apply_base(new_ratio);
-        return;
+    } else {
+        commit(new_ratio);
     }
-
-    if (semitone_snap && !event.mods.isCtrlDown()) {
-        double const start_cents = bridge.display_value(param_id, visual_to_ratio(drag_start_visual));
-        double const raw_cents = bridge.display_value(param_id, new_ratio);
-        new_ratio = ratio_for_display(start_cents + std::round((raw_cents - start_cents) / 100.0) * 100.0);
-    }
-
-    commit(new_ratio);
 }
 
 
@@ -669,12 +696,24 @@ void Knob::mouseWheelMove(
         juce::MouseEvent const& event,
         juce::MouseWheelDetails const& wheel
 ) {
+    bool const fine = event.mods.isCtrlDown();
+
     if (assigned) {
-        apply_depth(depth + (double)wheel.deltaY * WHEEL_STEP);
+        if (semitone_snap && !fine) {
+            /* step the modulation target by one semitone */
+            double const bvis = ratio_to_visual(base);
+            double const cents = bridge.display_value(
+                param_id, visual_to_ratio(juce::jlimit(0.0, 1.0, bvis + depth))
+            );
+            double const target = ratio_for_display(cents + (wheel.deltaY > 0.0f ? 100.0 : -100.0));
+            apply_depth(ratio_to_visual(target) - bvis);
+        } else {
+            apply_depth(depth + (double)wheel.deltaY * WHEEL_STEP);
+        }
         return;
     }
 
-    if (semitone_snap && !event.mods.isCtrlDown()) {
+    if (semitone_snap && !fine) {
         double const cents = bridge.display_value(param_id, ratio);
         commit(ratio_for_display(cents + (wheel.deltaY > 0.0f ? 100.0 : -100.0)));
         return;

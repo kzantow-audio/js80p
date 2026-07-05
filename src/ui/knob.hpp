@@ -100,6 +100,10 @@ class Knob : public juce::Component
         double visual_to_ratio(double const v) const;
         double ratio_for_display(double const target) const;
 
+        /* Semitone snapping (DTN/FIN); fine == Ctrl disables the snap. */
+        double snap_ratio(double const raw_ratio, double const from_visual, bool const fine) const;
+        double snap_depth(double const raw_depth, double const from_depth, bool const fine) const;
+
         void update_assignment();
         void read_base_depth();
         void apply_base(double const b);
