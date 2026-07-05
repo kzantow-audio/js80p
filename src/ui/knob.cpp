@@ -72,6 +72,9 @@ Knob::Knob(
     depth(0.5)
 {
     setWantsKeyboardFocus(false);
+    /* Allow the badge to sit at the ring point even on narrow cells (it may
+     * overhang the component slightly) instead of being clamped into the knob. */
+    setPaintingIsUnclipped(true);
 }
 
 
@@ -280,10 +283,8 @@ juce::Rectangle<float> Knob::badge_rect() const
     /* Top level with the ring top; bottom-left corner sits on the ring (+2px so
      * it clears it). Scales with knob size. */
     float const dx = std::sqrt(juce::jmax(0.0f, h * (2.0f * rr - h)));
-    float x = kb.getCentreX() + dx + 2.0f;
-    float y = kb.getCentreY() - rr;
-    x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), x);
-    y = juce::jmax(0.0f, y);
+    float x = juce::jmax(0.0f, kb.getCentreX() + dx + 2.0f);
+    float y = juce::jmax(0.0f, kb.getCentreY() - rr);
     return juce::Rectangle<float>(x, y, w, h);
 }
 
