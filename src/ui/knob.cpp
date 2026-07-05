@@ -49,6 +49,81 @@ static float angle_of(double const r)
 }
 
 
+/**
+ * \brief The modulation badge, a free-floating sibling of the knob kept in front
+ *        of the other controls. Being its own component with real bounds, it is
+ *        fully clickable and repaints cleanly even where it overhangs a narrow
+ *        cell (mix column, envelope/LFO knobs). Dragging it sets the modulation
+ *        amount; right-click opens the assign menu.
+ */
+class ModBadge : public juce::Component
+{
+    public:
+        explicit ModBadge(Knob& owner) : owner(owner), dragging(false), drag_start_depth(0.0)
+        {
+            setWantsKeyboardFocus(false);
+        }
+
+        void paint(juce::Graphics& g) override
+        {
+            juce::Rectangle<float> const r = getLocalBounds().toFloat();
+            juce::Colour const c = owner.mod_colour;
+            g.setColour(c.withAlpha(dragging ? 0.35f : 0.18f));
+            g.fillRoundedRectangle(r, 3.0f);
+            g.setColour(c);
+            g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
+            g.drawText(owner.mod_label, r, juce::Justification::centred, false);
+        }
+
+        void mouseDown(juce::MouseEvent const& event) override
+        {
+            if (event.mods.isPopupMenu()) {
+                owner.open_assign_menu();
+                return;
+            }
+
+            dragging = true;
+            drag_start_depth = owner.depth;
+            owner.dragging_depth = true;
+            owner.repaint();
+            repaint();
+        }
+
+        void mouseDrag(juce::MouseEvent const& event) override
+        {
+            if (!dragging) {
+                return;
+            }
+
+            double const sensitivity = event.mods.isCtrlDown()
+                ? Knob::DRAG_PIXELS_FULL_RANGE * 5.0 : Knob::DRAG_PIXELS_FULL_RANGE;
+            owner.apply_depth(
+                drag_start_depth - (double)event.getDistanceFromDragStartY() / sensitivity
+            );
+        }
+
+        void mouseUp(juce::MouseEvent const& /* event */) override
+        {
+            dragging = false;
+            owner.dragging_depth = false;
+            owner.repaint();
+            repaint();
+        }
+
+        void mouseDoubleClick(juce::MouseEvent const& /* event */) override
+        {
+            owner.apply_depth(0.0);
+        }
+
+    private:
+        Knob& owner;
+        bool dragging;
+        double drag_start_depth;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModBadge)
+};
+
+
 Knob::Knob(
         ParamBridge& bridge,
         Synth::ParamId const param_id,
@@ -72,10 +147,10 @@ Knob::Knob(
     depth(0.5)
 {
     setWantsKeyboardFocus(false);
-    /* Allow the badge to sit at the ring point even on narrow cells (it may
-     * overhang the component slightly) instead of being clamped into the knob. */
-    setPaintingIsUnclipped(true);
 }
+
+
+Knob::~Knob() = default;
 
 
 void Knob::set_manager(ModulationManager* const m) { manager = m; }
@@ -160,8 +235,44 @@ void Knob::update_assignment()
             read_base_depth();
         }
 
+        update_badge();
+        if (badge != nullptr) {
+            badge->repaint();
+        }
         repaint();
     }
+}
+
+
+void Knob::update_badge()
+{
+    juce::Component* const parent = getParentComponent();
+    bool const show = assigned && parent != nullptr && isVisible();
+
+    if (!show) {
+        if (badge != nullptr) {
+            badge->setVisible(false);
+        }
+        return;
+    }
+
+    if (badge == nullptr) {
+        badge = std::make_unique<ModBadge>(*this);
+    }
+
+    if (badge->getParentComponent() != parent) {
+        parent->addChildComponent(badge.get());
+        badge->toFront(false);
+    }
+
+    juce::Rectangle<float> const br = badge_rect();
+    badge->setBounds(
+        getX() + juce::roundToInt(br.getX()),
+        getY() + juce::roundToInt(br.getY()),
+        juce::roundToInt(br.getWidth()),
+        juce::roundToInt(br.getHeight())
+    );
+    badge->setVisible(true);
 }
 
 
@@ -230,6 +341,8 @@ void Knob::refresh()
             repaint();
         }
     }
+
+    update_badge();
 }
 
 
@@ -353,13 +466,7 @@ void Knob::paint(juce::Graphics& g)
     float const ty = cy - std::cos(target_angle) * rr;
     g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
 
-    /* Top-right source handle: drag it to set the modulation amount. */
-    juce::Rectangle<float> const badge = badge_rect();
-    g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
-    g.fillRoundedRectangle(badge, 3.0f);
-    g.setColour(active);
-    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
-    g.drawText(mod_label, badge, juce::Justification::centred, false);
+    /* The badge itself is drawn by the free-floating ModBadge (see update_badge). */
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
     double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
@@ -439,6 +546,18 @@ void Knob::open_assign_menu()
 }
 
 
+bool Knob::hitTest(int x, int y)
+{
+    /* Only the modulation-ring column is clickable - the knob's cell is wider
+     * than the control, and that invisible margin must not swallow clicks meant
+     * for a neighbour's badge or control. Left/right bound = the ring radius. */
+    juce::Rectangle<float> const kb = knob_circle();
+    float const rr = kb.getWidth() * 0.5f + 3.0f;
+    float const cx = kb.getCentreX();
+    return (float)x >= cx - rr && (float)x <= cx + rr;
+}
+
+
 void Knob::mouseDown(juce::MouseEvent const& event)
 {
     if (event.mods.isPopupMenu() && manager != nullptr) {
@@ -447,14 +566,7 @@ void Knob::mouseDown(juce::MouseEvent const& event)
     }
 
     dragging = true;
-
-    if (assigned && badge_rect().expanded(3.0f).contains(event.position)) {
-        dragging_depth = true;
-        drag_start_depth = depth;
-    } else {
-        dragging_depth = false;
-        drag_start_visual = ratio_to_visual(assigned ? base : ratio);
-    }
+    drag_start_visual = ratio_to_visual(assigned ? base : ratio);
 }
 
 
@@ -463,11 +575,6 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
     double const sensitivity =
         event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
-
-    if (dragging_depth) {
-        apply_depth(drag_start_depth + delta);
-        return;
-    }
 
     double new_ratio = visual_to_ratio(juce::jlimit(0.0, 1.0, drag_start_visual + delta));
 
@@ -488,24 +595,14 @@ void Knob::mouseDrag(juce::MouseEvent const& event)
 
 void Knob::mouseUp(juce::MouseEvent const& /* event */)
 {
-    bool const was_depth = dragging_depth;
     dragging = false;
-    dragging_depth = false;
-
-    if (was_depth) {
-        repaint();   /* revert the below-knob value from amount to line value */
-    }
 }
 
 
 void Knob::mouseDoubleClick(juce::MouseEvent const& event)
 {
     if (assigned) {
-        if (badge_rect().expanded(3.0f).contains(event.position)) {
-            apply_depth(0.0);   /* upper bound = lower bound: no modulation */
-        } else {
-            apply_base(bridge.get_default_ratio(param_id));   /* reset base */
-        }
+        apply_base(bridge.get_default_ratio(param_id));   /* reset base (badge resets depth) */
         return;
     }
 

@@ -19,6 +19,8 @@
 #ifndef JS80P__UI__KNOB_HPP
 #define JS80P__UI__KNOB_HPP
 
+#include <memory>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
@@ -31,6 +33,8 @@
 
 namespace JS80P
 {
+
+class ModBadge;
 
 /**
  * \brief A resolution-independent rotary control bound to one Synth parameter.
@@ -48,6 +52,8 @@ class Knob : public juce::Component
             juce::String const& label
         );
 
+        ~Knob() override;
+
         /** Make this knob a modulation destination (right-click to assign). */
         void set_manager(ModulationManager* const manager);
 
@@ -58,6 +64,7 @@ class Knob : public juce::Component
         void refresh();
 
         void paint(juce::Graphics& g) override;
+        bool hitTest(int x, int y) override;
         void mouseDown(juce::MouseEvent const& event) override;
         void mouseDrag(juce::MouseEvent const& event) override;
         void mouseUp(juce::MouseEvent const& event) override;
@@ -68,8 +75,16 @@ class Knob : public juce::Component
         ) override;
 
     private:
+        friend class ModBadge;
+
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
+
+        /**
+         * \brief Position the free-floating badge component (a sibling brought to
+         *        front) in parent coordinates, or hide it when unassigned.
+         */
+        void update_badge();
 
         juce::String format_value() const;
         juce::String format_ratio(double const r) const;
@@ -109,6 +124,8 @@ class Knob : public juce::Component
         juce::Colour mod_colour;  /* badge/ring colour by source type */
         double base;
         double depth;   /* signed: target = clamp(base + depth) */
+
+        std::unique_ptr<ModBadge> badge;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Knob)
 };
