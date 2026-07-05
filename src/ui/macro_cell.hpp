@@ -55,6 +55,7 @@ class MacroCell : public juce::Component
         juce::Rectangle<float> knob_circle() const;
         juce::Rectangle<float> badge_rect() const;
         juce::String source_label() const;
+        bool has_source() const;
         void write_base(double const b);
         void write_depth(double const d);
         void open_source_menu();

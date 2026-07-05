@@ -126,6 +126,12 @@ juce::String MacroCell::source_label() const
 }
 
 
+bool MacroCell::has_source() const
+{
+    return bridge.controller(in_p) != Synth::ControllerId::NONE;
+}
+
+
 void MacroCell::write_base(double const b)
 {
     base = juce::jlimit(0.0, 1.0, b);
@@ -179,24 +185,36 @@ void MacroCell::paint(juce::Graphics& g)
     g.drawEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f, 1.2f);
     g.drawLine(cx, cy, cx + std::sin(base_angle) * body, cy - std::cos(base_angle) * body, 2.0f);
 
-    /* Reach ring: min -> max (the modulation range). */
-    float const target = (float)juce::jlimit(0.0, 1.0, base + depth);
-    float const target_angle = angle_of(target);
-    float const rr = r + 3.0f;
-    juce::Path reach;
-    reach.addCentredArc(cx, cy, rr, rr, 0.0f, juce::jmin(base_angle, target_angle),
-                        juce::jmax(base_angle, target_angle), true);
-    g.setColour(active);
-    g.strokePath(reach, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    bool const sourced = has_source();
 
-    /* Source badge. */
+    /* Reach ring: min -> max (the modulation range) - only when a source drives
+     * the macro. */
+    if (sourced) {
+        float const target = (float)juce::jlimit(0.0, 1.0, base + depth);
+        float const target_angle = angle_of(target);
+        float const rr = r + 3.0f;
+        juce::Path reach;
+        reach.addCentredArc(cx, cy, rr, rr, 0.0f, juce::jmin(base_angle, target_angle),
+                            juce::jmax(base_angle, target_angle), true);
+        g.setColour(active);
+        g.strokePath(reach, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    /* Source badge: a solid, labelled chip once a source is chosen; otherwise a
+     * light-grey empty outline placeholder. */
     juce::Rectangle<float> const badge = badge_rect();
-    g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
-    g.fillRoundedRectangle(badge, 3.0f);
-    g.setColour(active);
-    g.drawRoundedRectangle(badge, 3.0f, 1.0f);
-    g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
-    g.drawText(source_label(), badge, juce::Justification::centred, false);
+
+    if (sourced) {
+        g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
+        g.fillRoundedRectangle(badge, 3.0f);
+        g.setColour(active);
+        g.drawRoundedRectangle(badge, 3.0f, 1.0f);
+        g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
+        g.drawText(source_label(), badge, juce::Justification::centred, false);
+    } else {
+        g.setColour(Theme::TEXT_DIM);
+        g.drawRoundedRectangle(badge, 3.0f, 1.0f);
+    }
 
     double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
     g.setColour(dragging_depth ? active : Theme::TEXT);
@@ -210,8 +228,8 @@ void MacroCell::mouseDown(juce::MouseEvent const& event)
 {
     if (badge_rect().expanded(3.0f).contains(event.position)) {
         badge_press = true;
-        dragging_depth = true;
         press_distance = 0;
+        dragging_depth = has_source();   /* no range to drag without a source */
         drag_start_depth = depth;
         return;
     }
@@ -228,9 +246,13 @@ void MacroCell::mouseDrag(juce::MouseEvent const& event)
         event.mods.isCtrlDown() ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
     double const delta = -(double)event.getDistanceFromDragStartY() / sensitivity;
 
-    if (dragging_depth) {
+    if (badge_press) {
         press_distance = juce::jmax(press_distance, event.getDistanceFromDragStart());
-        write_depth(drag_start_depth + delta);
+
+        if (dragging_depth) {
+            write_depth(drag_start_depth + delta);   /* only when sourced */
+        }
+
         return;
     }
 
