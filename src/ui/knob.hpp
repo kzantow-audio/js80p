@@ -69,6 +69,10 @@ class Knob : public juce::Component
         void set_semitone_snap(bool const on);
         void set_min_ratio(double const r);
 
+        /** Show these option names instead of the raw index for a discrete
+         *  parameter (e.g. filter / distortion type). */
+        void set_discrete_labels(juce::StringArray labels);
+
         void refresh();
 
         /** Vertical drag distance (px) that spans the full 0..1 range; shared
@@ -129,6 +133,7 @@ class Knob : public juce::Component
         ModulationManager* manager;
         int mod_caps;
         std::vector<Synth::ParamId> mirrors;
+        juce::StringArray discrete_labels;
 
         double ratio;
         double skew;

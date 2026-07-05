@@ -28,9 +28,13 @@ legacy `Makefile`.
     - Two tiny pie-fill dot controls on each OSC title (oscillator inaccuracy /
       instability) and on each envelope card title (time / level inaccuracy); each
       fills clockwise from the bottom.
-  - *Effects page*: recreates the original effects chain (Input, Vol 1-3, Dist 1/2,
-    Filter 1/2, Tape, Chorus, Echo, Reverb) as panels of knobs; type selectors are
-    rendered as knobs; no LG toggles.
+  - *Effects page*: recreates the original effects chain as panels of knobs, with
+    the macro strip still shown on top. The top line holds Input, Vol 1, Dist 1/2,
+    Filter 1/2, Vol 2 and OUT (Vol 3); Tape, Chorus, Echo and Reverb each get their
+    own full-width single-line row. Continuous knobs are macro-modulation
+    destinations (right-click → Modulate by); the Filter cutoffs use the 1 kHz-
+    center scaling and the Dist / Filter type knobs display names, not indices.
+    No LG toggles.
 - **Modulation** (see `doc/z-gui.md` §5-6): knobs are modulation-aware (rotation =
   base, ring-band / badge drag = amount); envelope/LFO groups sharing a shape are one
   editor card; assigning an existing modulator clones a fresh pool slot; global

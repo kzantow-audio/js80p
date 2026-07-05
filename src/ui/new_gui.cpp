@@ -18,6 +18,7 @@
 
 #include "ui/new_gui.hpp"
 
+#include "ui/param_labels.hpp"
 #include "ui/theme.hpp"
 
 
@@ -53,7 +54,7 @@ NewGui::NewGui(Synth& synth)
     : bridge(synth),
     manager(bridge),
     macro_strip(bridge),
-    effects_page(bridge),
+    effects_page(bridge, manager),
     active_page(Page::SYNTH),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
@@ -139,9 +140,10 @@ NewGui::NewGui(Synth& synth)
     add_knob(osc2, Synth::ParamId::CN,   "NOISE");
     add_knob(osc2, Synth::ParamId::CFLD, "FOLD");
     add_knob(osc2, Synth::ParamId::CDL,   "DIST");
-    /* Carrier distortion type: shown as a knob stepping through the types,
-     * sitting next to the DIST (level) knob. */
-    add_knob(osc2, Synth::ParamId::CDTYP, "TYPE");
+    /* Carrier distortion type: shown as a knob stepping through the types (by
+     * name), sitting next to the DIST (level) knob. */
+    add_knob(osc2, Synth::ParamId::CDTYP, "TYPE")
+        .set_discrete_labels(distortion_type_labels());
     osc2_filters = add_filters(
         { Synth::ParamId::CF1TYP, Synth::ParamId::CF1FRQ, Synth::ParamId::CF1Q, Synth::ParamId::CF1G },
         { Synth::ParamId::CF2TYP, Synth::ParamId::CF2FRQ, Synth::ParamId::CF2Q, Synth::ParamId::CF2G },
@@ -296,7 +298,8 @@ void NewGui::timerCallback()
 
 void NewGui::set_synth_visible(bool const visible)
 {
-    macro_strip.setVisible(visible);
+    /* The macro strip stays visible on the EFFECTS page too, since effect knobs
+     * are macro-modulation destinations. */
     mod_viewport.setVisible(visible);
 
     for (Knob* const knob : knobs) {
@@ -459,16 +462,16 @@ void NewGui::resized()
         tab_effects_bounds = juce::Rectangle<int>(x0 + tab_w + tab_gap, ty, tab_w, tab_h);
     }
 
-    /* The EFFECTS page fills the whole area below the header (the macro strip is
-     * hidden on that page), inset to match the synth body padding. */
-    body_bounds = area.reduced(5, 5);
-    effects_page.setBounds(body_bounds);
-
+    /* The macro strip is always visible (both pages). */
     macro_strip.setBounds(area.removeFromTop(66));
     area.reduce(5, 5);
 
+    /* The EFFECTS page fills the body below the macro strip. */
+    body_bounds = area;
+    effects_page.setBounds(body_bounds);
+
     int const gap = 5;
-    int const filter_height = 114;
+    int const filter_height = 130;
 
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
@@ -689,7 +692,7 @@ void NewGui::paint(juce::Graphics& g)
      * one hugging OSC 1 (flow into the mix knobs) and one hugging OSC 2 (flow
      * out to the carrier). */
     {
-        float const h = 16.0f;
+        float const h = 8.0f;
         float const w = h * 0.62f;
         float const cy = (float)mix_bounds.getCentreY();
         auto arrow = [&g, h, w, cy](float const cx) {
@@ -700,7 +703,7 @@ void NewGui::paint(juce::Graphics& g)
             tri.closeSubPath();
             g.fillPath(tri);
         };
-        g.setColour(Theme::TEXT_DIM);
+        g.setColour(Theme::TEXT_DIM.withAlpha(0.5f));
         arrow((float)mix_bounds.getX() + w * 0.5f + 2.0f);
         arrow((float)mix_bounds.getRight() - w * 0.5f - 2.0f);
     }

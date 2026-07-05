@@ -28,6 +28,7 @@
 #include "synth.hpp"
 
 #include "ui/knob.hpp"
+#include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -45,7 +46,7 @@ namespace JS80P
 class EffectsPage : public juce::Component
 {
     public:
-        explicit EffectsPage(ParamBridge& bridge);
+        EffectsPage(ParamBridge& bridge, ModulationManager& manager);
 
         void resized() override;
 
@@ -63,6 +64,7 @@ class EffectsPage : public juce::Component
         {
             juce::String title;
             int cols;
+            bool full_row;   /* laid out on its own full-width row */
             std::vector<Knob*> knobs;
             juce::Rectangle<int> bounds;
         };
@@ -81,12 +83,15 @@ class EffectsPage : public juce::Component
         void add_panel(
             juce::String title,
             int const cols,
-            std::initializer_list<KnobSpec> const specs
+            std::initializer_list<KnobSpec> const specs,
+            bool const full_row = false
         );
+        void place_knobs(Panel& panel);
         void layout();
         void paint_content(juce::Graphics& g);
 
         ParamBridge& bridge;
+        ModulationManager& manager;
         Content content;
         juce::Viewport viewport;
         juce::OwnedArray<Knob> knobs;

@@ -108,6 +108,8 @@ class NewGui : public juce::Component, private juce::Timer
         MacroStrip macro_strip;
         EffectsPage effects_page;
         Page active_page;
+        /* Enables the small dot controls' tooltips (osc/env inaccuracy). */
+        juce::TooltipWindow tooltip_window { this };
         juce::Viewport mod_viewport;
         juce::Component mod_content;
         juce::OwnedArray<ModulatorCard> cards;

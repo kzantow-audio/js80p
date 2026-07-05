@@ -158,6 +158,7 @@ Knob::~Knob() = default;
 void Knob::set_manager(ModulationManager* const m) { manager = m; }
 void Knob::set_mod_caps(int const c) { mod_caps = c; }
 void Knob::set_mirrors(std::vector<Synth::ParamId> m) { mirrors = std::move(m); }
+void Knob::set_discrete_labels(juce::StringArray labels) { discrete_labels = std::move(labels); }
 
 
 void Knob::assign_mirrors(Modulation::Type const type, int const slot)
@@ -421,6 +422,14 @@ juce::String Knob::format_value() const
 
 juce::String Knob::format_ratio(double const r) const
 {
+    if (!discrete_labels.isEmpty() && bridge.is_discrete(param_id)) {
+        int const idx = (int)std::lround(bridge.display_value(param_id, r));
+
+        if (idx >= 0 && idx < discrete_labels.size()) {
+            return discrete_labels[idx];
+        }
+    }
+
     double const value = bridge.display_value(param_id, r);
 
     if (semitone_snap) {
