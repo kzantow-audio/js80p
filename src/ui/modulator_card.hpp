@@ -28,11 +28,11 @@
 #include "js80p.hpp"
 #include "synth.hpp"
 
+#include "ui/curve_selector.hpp"
 #include "ui/knob.hpp"
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
-#include "ui/vslider.hpp"
 #include "ui/waveform_selector.hpp"
 
 
@@ -48,7 +48,10 @@ namespace JS80P
 class ModulatorCard : public juce::Component
 {
     public:
-        ModulatorCard(ParamBridge& bridge, ModulationManager::Group const& group);
+        ModulatorCard(
+            ParamBridge& bridge, ModulationManager& manager,
+            ModulationManager::Group const& group
+        );
 
         /** LFO cards are taller to fit the 2-row waveform button group. */
         int preferred_height() const;
@@ -66,14 +69,15 @@ class ModulatorCard : public juce::Component
         void toggle_sync();
 
         ParamBridge& bridge;
+        ModulationManager& manager;
         Modulation::Type type;
         int rep;
         std::vector<int> members;
         std::vector<Synth::ParamId> destinations;
         std::vector<std::pair<int, Synth::ParamId>> connections;
 
-        juce::OwnedArray<VSlider> sliders;   /* envelope A/H/D/R */
-        juce::OwnedArray<Knob> knobs;        /* LFO rate/phase/dist/rand */
+        juce::OwnedArray<Knob> knobs;        /* env A/H/D/R or LFO rate/phase/... */
+        juce::OwnedArray<CurveSelector> curves;   /* env attack/decay/release shapes */
         std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
         std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */
         bool lfo_expanded;

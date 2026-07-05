@@ -25,8 +25,10 @@ namespace JS80P
 {
 
 ModulatorCard::ModulatorCard(
-        ParamBridge& bridge, ModulationManager::Group const& group
+        ParamBridge& bridge, ModulationManager& manager,
+        ModulationManager::Group const& group
 ) : bridge(bridge),
+    manager(manager),
     type(group.type),
     rep(group.rep),
     members(group.members),
@@ -36,9 +38,7 @@ ModulatorCard::ModulatorCard(
 {
     setWantsKeyboardFocus(false);
 
-    /* All duplicate slots are edited together: each control writes to every
-     * member so the single combined display never drifts out of sync. */
-    auto build = [this](Synth::ParamId (*fn)(int)) {
+    auto build_curve = [this](Synth::ParamId (*fn)(int)) {
         std::vector<Synth::ParamId> v;
         for (int m : members) {
             v.push_back(fn(m));
@@ -47,16 +47,23 @@ ModulatorCard::ModulatorCard(
     };
 
     if (type == Modulation::ENVELOPE) {
-        VSlider* const atk = new VSlider(bridge, build(Modulation::env_atk), "A", build(Modulation::env_ash));
-        atk->set_min_ratio(bridge.ratio_for_display(Modulation::env_atk(rep), 0.001));
-        sliders.add(atk);
-        sliders.add(new VSlider(bridge, build(Modulation::env_hld), "H"));
-        VSlider* const dec = new VSlider(bridge, build(Modulation::env_dec), "D", build(Modulation::env_dsh));
-        dec->set_curve_falling(true);
-        sliders.add(dec);
-        VSlider* const rel = new VSlider(bridge, build(Modulation::env_rel), "R", build(Modulation::env_rsh));
-        rel->set_curve_falling(true);
-        sliders.add(rel);
+        knobs.add(new Knob(bridge, Modulation::env_atk(rep), "A"));
+        knobs.getLast()->set_min_ratio(bridge.ratio_for_display(Modulation::env_atk(rep), 0.001));
+        knobs.add(new Knob(bridge, Modulation::env_hld(rep), "H"));
+        knobs.add(new Knob(bridge, Modulation::env_dec(rep), "D"));
+        knobs.add(new Knob(bridge, Modulation::env_rel(rep), "R"));
+
+        for (Knob* const k : knobs) {
+            k->set_manager(&manager);
+        }
+
+        curves.add(new CurveSelector(bridge, build_curve(Modulation::env_ash), false));
+        curves.add(new CurveSelector(bridge, build_curve(Modulation::env_dsh), true));
+        curves.add(new CurveSelector(bridge, build_curve(Modulation::env_rsh), true));
+
+        for (CurveSelector* const c : curves) {
+            addAndMakeVisible(c);
+        }
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         wave->set_single(true);
@@ -73,10 +80,6 @@ ModulatorCard::ModulatorCard(
         knobs.add(new Knob(bridge, Modulation::lfo_rnd(rep), "RAND"));
     }
 
-    for (VSlider* const s : sliders) {
-        addAndMakeVisible(s);
-    }
-
     for (Knob* const k : knobs) {
         addAndMakeVisible(k);
     }
@@ -85,7 +88,7 @@ ModulatorCard::ModulatorCard(
 
 int ModulatorCard::preferred_height() const
 {
-    return type == Modulation::LFO ? 92 : 104;
+    return type == Modulation::LFO ? 72 : 92;
 }
 
 
@@ -139,12 +142,12 @@ void ModulatorCard::propagate()
 
 void ModulatorCard::refresh()
 {
-    for (VSlider* const s : sliders) {
-        s->refresh();
-    }
-
     for (Knob* const k : knobs) {
         k->refresh();
+    }
+
+    for (CurveSelector* const c : curves) {
+        c->refresh();
     }
 
     if (wave != nullptr) {
@@ -190,13 +193,24 @@ void ModulatorCard::resized()
         return;
     }
 
-    int const n = sliders.size();
+    /* Envelope: a row of A/H/D/R knobs, with the attack/decay/release curve
+     * squares centred under their knob. */
+    juce::Rectangle<int> const curve_row = b.removeFromBottom(14);
+    b.removeFromBottom(2);
 
-    if (n > 0) {
-        int const cell = b.getWidth() / n;
-        for (int i = 0; i != n; ++i) {
-            sliders[i]->setBounds(b.getX() + i * cell, b.getY(), cell - 3, b.getHeight());
-        }
+    int const n = knobs.size();
+    int const cell = n > 0 ? b.getWidth() / n : 0;
+
+    for (int i = 0; i != n; ++i) {
+        knobs[i]->setBounds(b.getX() + i * cell, b.getY(), cell, b.getHeight());
+    }
+
+    int const cs = 14;
+    int const cols[3] = { 0, 2, 3 };   /* attack, decay, release columns */
+
+    for (int i = 0; i != curves.size(); ++i) {
+        int const x = b.getX() + cols[i] * cell + (cell - cs) / 2;
+        curves[i]->setBounds(x, curve_row.getY(), cs, cs);
     }
 }
 

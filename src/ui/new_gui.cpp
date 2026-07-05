@@ -229,7 +229,7 @@ void NewGui::rebuild_cards()
             continue;
         }
 
-        ModulatorCard* const card = new ModulatorCard(bridge, g);
+        ModulatorCard* const card = new ModulatorCard(bridge, manager, g);
         cards.add(card);
         mod_content.addAndMakeVisible(card);
     }

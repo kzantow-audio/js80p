@@ -53,6 +53,7 @@ class Knob : public juce::Component
 
         void set_center_value(double const display_value);
         void set_semitone_snap(bool const on);
+        void set_min_ratio(double const r);
 
         void refresh();
 
@@ -94,6 +95,7 @@ class Knob : public juce::Component
 
         double ratio;
         double skew;
+        double min_ratio;
         double drag_start_visual;
         bool dragging;
         bool dragging_depth;

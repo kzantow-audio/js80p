@@ -59,6 +59,7 @@ Knob::Knob(
     manager(nullptr),
     ratio(bridge.get_ratio(param_id)),
     skew(1.0),
+    min_ratio(0.0),
     drag_start_visual(0.0),
     dragging(false),
     dragging_depth(false),
@@ -76,6 +77,7 @@ Knob::Knob(
 
 void Knob::set_manager(ModulationManager* const m) { manager = m; }
 void Knob::set_semitone_snap(bool const on) { semitone_snap = on; }
+void Knob::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0, r); }
 
 
 double Knob::ratio_to_visual(double const r) const
@@ -268,7 +270,7 @@ juce::Rectangle<float> Knob::badge_rect() const
     juce::Rectangle<float> const kb = knob_circle();
     float const w = 22.0f;
     float const h = 13.0f;
-    float x = kb.getRight() - 2.0f;
+    float x = kb.getRight() + 2.0f;
     x = juce::jmin(x, (float)getWidth() - w - 1.0f);
     float const y = juce::jmax(0.0f, kb.getY() - 3.0f);
     return juce::Rectangle<float>(x, y, w, h);
@@ -357,7 +359,7 @@ void Knob::paint(juce::Graphics& g)
 
 void Knob::commit(double const new_ratio)
 {
-    ratio = juce::jlimit(0.0, 1.0, new_ratio);
+    ratio = juce::jlimit(min_ratio, 1.0, new_ratio);
     bridge.set_ratio(param_id, ratio);
     repaint();
 }
