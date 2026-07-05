@@ -33,6 +33,7 @@
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
+#include "ui/vfader.hpp"
 #include "ui/waveform_selector.hpp"
 
 
@@ -67,6 +68,7 @@ class ModulatorCard : public juce::Component
     private:
         void set_expanded(bool const expanded);
         void toggle_sync();
+        void write_sustain();   /* SUS = INI + fraction*(PK-INI) per member */
 
         ParamBridge& bridge;
         ModulationManager& manager;
@@ -76,8 +78,10 @@ class ModulatorCard : public juce::Component
         std::vector<Synth::ParamId> destinations;
         std::vector<std::pair<int, Synth::ParamId>> connections;
 
-        juce::OwnedArray<Knob> knobs;        /* env A/H/D/R or LFO rate/phase/... */
+        juce::OwnedArray<Knob> knobs;        /* env D/A/H/D/R or LFO rate/phase/... */
         juce::OwnedArray<CurveSelector> curves;   /* env attack/decay/release shapes */
+        std::unique_ptr<VFader> sus_fader;   /* env sustain fraction (min..max) */
+        double sus_fraction;
         std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
         std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */
         bool lfo_expanded;

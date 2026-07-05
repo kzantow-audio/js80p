@@ -59,6 +59,7 @@ target_sources(JS80P PRIVATE
   src/ui/filter_panel.cpp
   src/ui/per_type_editor.cpp
   src/ui/curve_selector.cpp
+  src/ui/vfader.cpp
   src/ui/macro_cell.cpp
   src/ui/macro_strip.cpp
   src/ui/modulator_card.cpp

@@ -295,8 +295,9 @@ void Knob::apply_base(double const b)
     base = juce::jlimit(0.0, 1.0, b);
 
     if (mod_type == Modulation::ENVELOPE) {
+        /* INI and FIN follow the base; SUS is owned by the envelope card's
+         * sustain fraction, so it is left alone here. */
         bridge.set_ratio(Modulation::env_ini(mod_slot), base);
-        bridge.set_ratio(Modulation::env_sus(mod_slot), base);
         bridge.set_ratio(Modulation::env_fin(mod_slot), base);
     } else if (mod_type == Modulation::LFO) {
         bridge.set_ratio(Modulation::lfo_min(mod_slot), base);

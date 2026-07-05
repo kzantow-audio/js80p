@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cmath>
+
 #include "ui/modulator_card.hpp"
 
 #include "ui/theme.hpp"
@@ -34,6 +36,7 @@ ModulatorCard::ModulatorCard(
     members(group.members),
     destinations(group.destinations),
     connections(group.connections),
+    sus_fraction(0.0),
     lfo_expanded(false)
 {
     setWantsKeyboardFocus(false);
@@ -66,6 +69,19 @@ ModulatorCard::ModulatorCard(
         for (CurveSelector* const c : curves) {
             addAndMakeVisible(c);
         }
+
+        /* Sustain as a fraction between each destination's min (INI) and max
+         * (PK); read the current fraction from the representative. */
+        double const ini = bridge.get_ratio(Modulation::env_ini(rep));
+        double const pk = bridge.get_ratio(Modulation::env_pk(rep));
+        sus_fraction = (pk - ini) > 1.0e-6
+            ? juce::jlimit(0.0, 1.0, (bridge.get_ratio(Modulation::env_sus(rep)) - ini) / (pk - ini))
+            : 0.0;
+
+        sus_fader = std::make_unique<VFader>("SUS");
+        sus_fader->set_value(sus_fraction);
+        sus_fader->on_change = [this](double const v) { sus_fraction = v; write_sustain(); };
+        addAndMakeVisible(*sus_fader);
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         wave->set_single(true);
@@ -105,6 +121,20 @@ void ModulatorCard::set_expanded(bool const expanded)
     lfo_expanded = expanded;
     resized();
     repaint();
+}
+
+
+void ModulatorCard::write_sustain()
+{
+    for (int m : members) {
+        double const ini = bridge.get_ratio(Modulation::env_ini(m));
+        double const pk = bridge.get_ratio(Modulation::env_pk(m));
+        double const target = juce::jlimit(0.0, 1.0, ini + sus_fraction * (pk - ini));
+
+        if (std::fabs(bridge.get_ratio(Modulation::env_sus(m)) - target) > 1.0e-5) {
+            bridge.set_ratio(Modulation::env_sus(m), target);
+        }
+    }
 }
 
 
@@ -150,6 +180,10 @@ void ModulatorCard::propagate()
 
 void ModulatorCard::refresh()
 {
+    if (sus_fader != nullptr) {
+        write_sustain();   /* keep SUS tracking the fraction as min/max change */
+    }
+
     for (Knob* const k : knobs) {
         k->refresh();
     }
@@ -201,11 +235,14 @@ void ModulatorCard::resized()
         return;
     }
 
-    /* Envelope: one interspersed row -
-     * DLY | attack-curve | ATK | HLD | DEC | decay-curve | REL | release-curve. */
-    int const cw = 16;
-    int const kw = juce::jmax(30, (b.getWidth() - 3 * cw) / 5);
-    int const total = 5 * kw + 3 * cw;
+    /* Envelope row:
+     * DLY | A-curve | ATK | HLD | DEC | D-curve | SUS | REL | R-curve.
+     * Knobs and the sustain fader are full height; the curve selectors sit in
+     * their own space along the bottom edge. */
+    int const cw = 16;   /* curve square */
+    int const sw = 26;   /* sustain fader */
+    int const kw = juce::jmax(28, (b.getWidth() - 3 * cw - sw) / 5);
+    int const total = 5 * kw + 3 * cw + sw;
     int const h = b.getHeight();
     int x = b.getX() + juce::jmax(0, (b.getWidth() - total) / 2);
 
@@ -214,7 +251,7 @@ void ModulatorCard::resized()
         x += kw;
     };
     auto place_curve = [&](int const i) {
-        curves[i]->setBounds(x + (cw - cw) / 2, b.getY() + (h - cw) / 2, cw, cw);
+        curves[i]->setBounds(x, b.getBottom() - cw, cw, cw);
         x += cw;
     };
 
@@ -224,6 +261,8 @@ void ModulatorCard::resized()
     place_knob(2);    /* HLD */
     place_knob(3);    /* DEC */
     place_curve(1);   /* decay curve */
+    sus_fader->setBounds(x, b.getY(), sw, h);   /* SUS */
+    x += sw;
     place_knob(4);    /* REL */
     place_curve(2);   /* release curve */
 }
