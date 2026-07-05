@@ -105,11 +105,17 @@ juce::Rectangle<float> MacroCell::knob_circle() const
 juce::Rectangle<float> MacroCell::badge_rect() const
 {
     juce::Rectangle<float> const kb = knob_circle();
-    float const w = 24.0f;
+    float w = 20.0f;
+
+    if (has_source()) {
+        juce::Font const bf(juce::FontOptions().withHeight(10.0f).withStyle("Bold"));
+        w = juce::jmax(20.0f, juce::GlyphArrangement::getStringWidth(bf, source_label()) + 8.0f);
+    }
+
     float const h = 13.0f;
     float const rr = kb.getWidth() * 0.5f + 3.0f;
     float const diag = 0.7071f;
-    float x = juce::jlimit(0.0f, (float)getWidth() - w, kb.getCentreX() + diag * rr);
+    float x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), kb.getCentreX() + diag * rr);
     float y = juce::jmax(0.0f, kb.getCentreY() - diag * rr - h);
     return juce::Rectangle<float>(x, y, w, h);
 }

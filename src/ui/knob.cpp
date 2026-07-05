@@ -269,15 +269,18 @@ juce::Rectangle<float> Knob::knob_circle() const
 juce::Rectangle<float> Knob::badge_rect() const
 {
     /* Lower-left corner sits on the reach ring at the top-right (45 deg), so the
-     * badge always meets the modulation-amount curve regardless of cell width. */
+     * badge meets the modulation-amount curve regardless of cell width. Width
+     * fits the label with >= 4px padding each side and grows rightward. */
     juce::Rectangle<float> const kb = knob_circle();
-    float const w = 20.0f;
+    juce::Font const bf(juce::FontOptions().withHeight(10.0f).withStyle("Bold"));
+    float const tw = juce::GlyphArrangement::getStringWidth(bf, mod_label);
+    float const w = juce::jmax(16.0f, tw + 8.0f);
     float const h = 12.0f;
     float const rr = kb.getWidth() * 0.5f + 3.0f;
     float const diag = 0.7071f;
     float x = kb.getCentreX() + diag * rr;
     float y = kb.getCentreY() - diag * rr - h;
-    x = juce::jlimit(0.0f, (float)getWidth() - w, x);
+    x = juce::jlimit(0.0f, juce::jmax(0.0f, (float)getWidth() - w), x);
     y = juce::jmax(0.0f, y);
     return juce::Rectangle<float>(x, y, w, h);
 }
@@ -353,7 +356,7 @@ void Knob::paint(juce::Graphics& g)
     g.fillRoundedRectangle(badge, 3.0f);
     g.setColour(active);
     g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
-    g.drawText(mod_label, badge.reduced(2.0f, 0.0f), juce::Justification::centredLeft, false);
+    g.drawText(mod_label, badge, juce::Justification::centred, false);
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
     double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
