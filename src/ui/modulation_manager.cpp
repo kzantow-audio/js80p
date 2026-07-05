@@ -215,25 +215,40 @@ int ModulationManager::allocate(Modulation::Type const type, bool const need_pw)
 void ModulationManager::copy_shape(
         Modulation::Type const type, int const from, int const to
 ) {
+    auto copy = [this](Synth::ParamId const a, Synth::ParamId const b) {
+        bridge.set_ratio(a, bridge.get_ratio(b));
+    };
+
     if (type == Modulation::ENVELOPE) {
-        int const off[] = { 0, 2, 3, 5, 6, 8 };   /* SCL, DEL, ATK, HLD, DEC, REL */
-        for (int o : off) {
-            bridge.set_ratio(Modulation::pid((int)Modulation::env_scl(to) + o),
-                             bridge.get_ratio(Modulation::pid((int)Modulation::env_scl(from) + o)));
-        }
-        bridge.set_ratio(Modulation::env_ash(to), bridge.get_ratio(Modulation::env_ash(from)));
-        bridge.set_ratio(Modulation::env_dsh(to), bridge.get_ratio(Modulation::env_dsh(from)));
-        bridge.set_ratio(Modulation::env_rsh(to), bridge.get_ratio(Modulation::env_rsh(from)));
+        /* Everything shared by the group (all but the per-destination levels
+         * INI/PK/SUS/FIN), so a copy matches its source completely. */
+        copy(Modulation::env_scl(to), Modulation::env_scl(from));
+        copy(Modulation::env_del(to), Modulation::env_del(from));
+        copy(Modulation::env_atk(to), Modulation::env_atk(from));
+        copy(Modulation::env_hld(to), Modulation::env_hld(from));
+        copy(Modulation::env_dec(to), Modulation::env_dec(from));
+        copy(Modulation::env_rel(to), Modulation::env_rel(from));
+        copy(Modulation::env_tin(to), Modulation::env_tin(from));
+        copy(Modulation::env_vin(to), Modulation::env_vin(from));
+        copy(Modulation::env_ash(to), Modulation::env_ash(from));
+        copy(Modulation::env_dsh(to), Modulation::env_dsh(from));
+        copy(Modulation::env_rsh(to), Modulation::env_rsh(from));
+        copy(Modulation::env_upd(to), Modulation::env_upd(from));
+        copy(Modulation::env_syn(to), Modulation::env_syn(from));
     } else if (type == Modulation::LFO) {
-        bridge.set_ratio(Modulation::lfo_wav(to), bridge.get_ratio(Modulation::lfo_wav(from)));
-        bridge.set_ratio(Modulation::lfo_frq(to), bridge.get_ratio(Modulation::lfo_frq(from)));
-        bridge.set_ratio(Modulation::lfo_phs(to), bridge.get_ratio(Modulation::lfo_phs(from)));
-        bridge.set_ratio(Modulation::lfo_dst(to), bridge.get_ratio(Modulation::lfo_dst(from)));
-        bridge.set_ratio(Modulation::lfo_rnd(to), bridge.get_ratio(Modulation::lfo_rnd(from)));
-        bridge.set_ratio(Modulation::lfo_amp(to), bridge.get_ratio(Modulation::lfo_amp(from)));
+        copy(Modulation::lfo_wav(to), Modulation::lfo_wav(from));
+        copy(Modulation::lfo_frq(to), Modulation::lfo_frq(from));
+        copy(Modulation::lfo_phs(to), Modulation::lfo_phs(from));
+        copy(Modulation::lfo_dst(to), Modulation::lfo_dst(from));
+        copy(Modulation::lfo_rnd(to), Modulation::lfo_rnd(from));
+        copy(Modulation::lfo_amp(to), Modulation::lfo_amp(from));
+        copy(Modulation::lfo_log(to), Modulation::lfo_log(from));
+        copy(Modulation::lfo_cen(to), Modulation::lfo_cen(from));
+        copy(Modulation::lfo_syn(to), Modulation::lfo_syn(from));
+        copy(Modulation::lfo_aen(to), Modulation::lfo_aen(from));
 
         if (Modulation::lfo_has_pw(from) && Modulation::lfo_has_pw(to)) {
-            bridge.set_ratio(Modulation::lfo_pw(to), bridge.get_ratio(Modulation::lfo_pw(from)));
+            copy(Modulation::lfo_pw(to), Modulation::lfo_pw(from));
         }
     }
 }

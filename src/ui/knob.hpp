@@ -20,6 +20,7 @@
 #define JS80P__UI__KNOB_HPP
 
 #include <memory>
+#include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -59,6 +60,10 @@ class Knob : public juce::Component
 
         /** Restrict which modulator kinds may be assigned (Modulation::Cap). */
         void set_mod_caps(int const caps);
+
+        /** Other parameters (grouped copies) that must receive the same
+         *  modulator when this knob is assigned. */
+        void set_mirrors(std::vector<Synth::ParamId> params);
 
         void set_center_value(double const display_value);
         void set_semitone_snap(bool const on);
@@ -105,6 +110,8 @@ class Knob : public juce::Component
         double snap_depth(double const raw_depth, double const from_depth, bool const fine) const;
 
         void update_assignment();
+        void assign_mirrors(Modulation::Type const type, int const slot);
+        void clear_mirrors();
         void read_base_depth();
         void apply_base(double const b);
         void apply_depth(double const d);
@@ -118,6 +125,7 @@ class Knob : public juce::Component
         juce::String const label;
         ModulationManager* manager;
         int mod_caps;
+        std::vector<Synth::ParamId> mirrors;
 
         double ratio;
         double skew;

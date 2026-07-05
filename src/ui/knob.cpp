@@ -157,6 +157,29 @@ Knob::~Knob() = default;
 
 void Knob::set_manager(ModulationManager* const m) { manager = m; }
 void Knob::set_mod_caps(int const c) { mod_caps = c; }
+void Knob::set_mirrors(std::vector<Synth::ParamId> m) { mirrors = std::move(m); }
+
+
+void Knob::assign_mirrors(Modulation::Type const type, int const slot)
+{
+    if (slot == 0) {
+        return;
+    }
+
+    /* Point every grouped copy's matching param at the same modulator slot. */
+    Synth::ControllerId const cid = Modulation::controller_id(type, slot);
+    for (Synth::ParamId const m : mirrors) {
+        bridge.assign_controller(m, cid);
+    }
+}
+
+
+void Knob::clear_mirrors()
+{
+    for (Synth::ParamId const m : mirrors) {
+        bridge.assign_controller(m, Synth::ControllerId::NONE);
+    }
+}
 void Knob::set_semitone_snap(bool const on) { semitone_snap = on; }
 void Knob::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0, r); }
 
@@ -585,19 +608,34 @@ void Knob::open_assign_menu()
         juce::PopupMenu::Options().withTargetComponent(this),
         [self, clones](int const result) {
             double const b = self->bridge.get_ratio(self->param_id);
+            Modulation::Type type = Modulation::ENVELOPE;
+            int slot = 0;
 
-            if (result == 1) self->manager->assign(self->param_id, Modulation::ENVELOPE, b, 0);
-            else if (result == 2) self->manager->assign(self->param_id, Modulation::LFO, b, 0);
-            else if (result == 4) self->manager->unassign(self->param_id);
-            else if (result >= 100 && result < 200 && result - 100 < (int)clones->size()) {
+            if (result == 4) {
+                self->manager->unassign(self->param_id);
+                self->clear_mirrors();
+                self->update_assignment();
+                return;
+            }
+
+            if (result == 1) {
+                type = Modulation::ENVELOPE;
+                slot = self->manager->assign(self->param_id, Modulation::ENVELOPE, b, 0);
+            } else if (result == 2) {
+                type = Modulation::LFO;
+                slot = self->manager->assign(self->param_id, Modulation::LFO, b, 0);
+            } else if (result >= 100 && result < 200 && result - 100 < (int)clones->size()) {
                 std::pair<Modulation::Type, int> const& gp = (*clones)[result - 100];
-                self->manager->assign(self->param_id, gp.first, b, gp.second);
+                type = gp.first;
+                slot = self->manager->assign(self->param_id, gp.first, b, gp.second);
             } else if (result >= 200 && result - 200 < KNOB_SOURCE_COUNT) {
-                self->manager->assign_source(
+                type = Modulation::MACRO;
+                slot = self->manager->assign_source(
                     self->param_id, (Synth::ControllerId)KNOB_SOURCES[result - 200].id, b
                 );
             }
 
+            self->assign_mirrors(type, slot);
             self->update_assignment();
         }
     );

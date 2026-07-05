@@ -117,7 +117,12 @@ namespace Modulation
     inline Synth::ParamId env_rel(int const i) { return pid(347 + 12 * (i - 1)); }
     inline Synth::ParamId env_fin(int const i) { return pid(348 + 12 * (i - 1)); }
 
-    /* Envelope shape curves (stride-1 blocks): attack / decay / release. */
+    inline Synth::ParamId env_tin(int const i) { return pid(349 + 12 * (i - 1)); }
+    inline Synth::ParamId env_vin(int const i) { return pid(350 + 12 * (i - 1)); }
+
+    /* Envelope shape curves + mode (stride-1 blocks). */
+    inline Synth::ParamId env_upd(int const i) { return pid(602 + (i - 1)); }
+    inline Synth::ParamId env_syn(int const i) { return pid(637 + (i - 1)); }
     inline Synth::ParamId env_ash(int const i) { return pid(649 + (i - 1)); }
     inline Synth::ParamId env_dsh(int const i) { return pid(661 + (i - 1)); }
     inline Synth::ParamId env_rsh(int const i) { return pid(673 + (i - 1)); }
@@ -143,6 +148,7 @@ namespace Modulation
     inline Synth::ParamId lfo_log(int const i) { return pid(563 + (i - 1)); }
     inline Synth::ParamId lfo_cen(int const i) { return pid(571 + (i - 1)); }
     inline Synth::ParamId lfo_syn(int const i) { return pid(579 + (i - 1)); }
+    inline Synth::ParamId lfo_aen(int const i) { return pid(629 + (i - 1)); }
 
     /* ---- Macro params (stride 7 from M1MID = 129) ---- */
 

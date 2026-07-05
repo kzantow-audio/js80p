@@ -49,6 +49,18 @@ ModulatorCard::ModulatorCard(
         return v;
     };
 
+    /* The other grouped copies' matching param, so modulating a knob applies to
+     * every copy. */
+    auto mirror = [this](Synth::ParamId (*fn)(int)) {
+        std::vector<Synth::ParamId> v;
+        for (int m : members) {
+            if (m != rep) {
+                v.push_back(fn(m));
+            }
+        }
+        return v;
+    };
+
     if (type == Modulation::ENVELOPE) {
         knobs.add(new Knob(bridge, Modulation::env_del(rep), "DLY"));
         knobs.add(new Knob(bridge, Modulation::env_atk(rep), "ATK"));
@@ -62,6 +74,12 @@ ModulatorCard::ModulatorCard(
             k->set_mod_caps(Modulation::CAP_MACRO);   /* envelope params: macros only */
             k->set_center_value(1.0);   /* time knobs: exponential, 1 second midpoint */
         }
+
+        knobs[0]->set_mirrors(mirror(Modulation::env_del));
+        knobs[1]->set_mirrors(mirror(Modulation::env_atk));
+        knobs[2]->set_mirrors(mirror(Modulation::env_hld));
+        knobs[3]->set_mirrors(mirror(Modulation::env_dec));
+        knobs[4]->set_mirrors(mirror(Modulation::env_rel));
 
         curves.add(new CurveSelector(bridge, build_curve(Modulation::env_ash), false));
         curves.add(new CurveSelector(bridge, build_curve(Modulation::env_dsh), true));
@@ -102,6 +120,11 @@ ModulatorCard::ModulatorCard(
             k->set_manager(&manager);
             k->set_mod_caps(Modulation::CAP_LFO | Modulation::CAP_MACRO);   /* LFOs + macros */
         }
+
+        knobs[0]->set_mirrors(mirror(Modulation::lfo_frq));
+        knobs[1]->set_mirrors(mirror(Modulation::lfo_phs));
+        knobs[2]->set_mirrors(mirror(Modulation::lfo_dst));
+        knobs[3]->set_mirrors(mirror(Modulation::lfo_rnd));
     }
 
     for (Knob* const k : knobs) {
