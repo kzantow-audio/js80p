@@ -103,6 +103,7 @@ class Knob : public juce::Component
         bool assigned;
         Modulation::Type mod_type;
         int mod_slot;
+        juce::String mod_label;   /* badge text: source name or slot */
         double base;
         double depth;   /* signed: target = clamp(base + depth) */
 

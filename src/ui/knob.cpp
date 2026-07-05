@@ -32,6 +32,17 @@ namespace JS80P
 static constexpr float START_ANGLE = juce::MathConstants<float>::pi * 1.2f;
 static constexpr float END_ANGLE = juce::MathConstants<float>::pi * 2.8f;
 
+/* Global sources assignable through an intermediate macro (label + ControllerId). */
+static struct { char const* name; int id; } const KNOB_SOURCES[] = {
+    { "Macro 1", 131 }, { "Macro 2", 132 }, { "Macro 3", 133 }, { "Macro 4", 134 },
+    { "Macro 5", 135 }, { "Macro 6", 136 }, { "Macro 7", 137 }, { "Macro 8", 138 },
+    { "Mod wheel", 1 }, { "Breath", 2 }, { "Foot", 4 }, { "Volume", 7 },
+    { "Pan", 10 }, { "Expression", 11 }, { "Sustain", 64 }, { "Cutoff CC74", 74 },
+    { "Pitch wheel", 128 }, { "Note", 129 }, { "Velocity", 130 }, { "Aftertouch", 155 },
+    { "MIDI Learn", 156 },
+};
+static constexpr int KNOB_SOURCE_COUNT = (int)(sizeof(KNOB_SOURCES) / sizeof(KNOB_SOURCES[0]));
+
 static float angle_of(double const r)
 {
     return START_ANGLE + (float)r * (END_ANGLE - START_ANGLE);
@@ -127,6 +138,18 @@ void Knob::update_assignment()
         if (now) {
             mod_type = type;
             mod_slot = slot;
+
+            /* An intermediate macro (input driven by a global source) shows the
+             * source's name, not its pool slot. */
+            mod_label = juce::String(Modulation::prefix(type)) + juce::String(slot);
+
+            if (type == Modulation::MACRO) {
+                Synth::ControllerId const src = bridge.controller(Modulation::macro_in(slot));
+                if (src != Synth::ControllerId::NONE) {
+                    mod_label = Modulation::source_short_name(src);
+                }
+            }
+
             read_base_depth();
         }
 
@@ -316,15 +339,13 @@ void Knob::paint(juce::Graphics& g)
     float const ty = cy - std::cos(target_angle) * rr;
     g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
 
-    /* Top-right E#/L# handle: drag it to set the modulation amount. */
+    /* Top-right source handle: drag it to set the modulation amount. */
     juce::Rectangle<float> const badge = badge_rect();
-    juce::String const label =
-        juce::String(Modulation::prefix(mod_type)) + juce::String(mod_slot);
     g.setColour(active.withAlpha(dragging_depth ? 0.35f : 0.18f));
     g.fillRoundedRectangle(badge, 3.0f);
     g.setColour(active);
     g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
-    g.drawText(label, badge, juce::Justification::centred, false);
+    g.drawText(mod_label, badge, juce::Justification::centred, false);
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
     double const shown = dragging_depth ? juce::jlimit(0.0, 1.0, base + depth) : base;
@@ -369,8 +390,16 @@ void Knob::open_assign_menu()
                  manager->free_count(Modulation::ENVELOPE) > 0);
     menu.addItem(2, "New LFO  (" + juce::String(manager->free_count(Modulation::LFO)) + ")",
                  manager->free_count(Modulation::LFO) > 0);
-    menu.addItem(3, "New macro  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
-                 manager->free_count(Modulation::MACRO) > 0);
+
+    /* Global sources route through an intermediate macro carrying this
+     * destination's unique range. */
+    bool const have_macro = manager->free_count(Modulation::MACRO) > 0;
+    juce::PopupMenu sources;
+    for (int i = 0; i != KNOB_SOURCE_COUNT; ++i) {
+        sources.addItem(200 + i, KNOB_SOURCES[i].name, have_macro);
+    }
+    menu.addSubMenu("Modulate by  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
+                    sources);
 
     Knob* const self = this;
     menu.showMenuAsync(
@@ -380,11 +409,14 @@ void Knob::open_assign_menu()
 
             if (result == 1) self->manager->assign(self->param_id, Modulation::ENVELOPE, b, 0);
             else if (result == 2) self->manager->assign(self->param_id, Modulation::LFO, b, 0);
-            else if (result == 3) self->manager->assign(self->param_id, Modulation::MACRO, b, 0);
             else if (result == 4) self->manager->unassign(self->param_id);
-            else if (result >= 100 && result - 100 < (int)clones->size()) {
+            else if (result >= 100 && result < 200 && result - 100 < (int)clones->size()) {
                 std::pair<Modulation::Type, int> const& gp = (*clones)[result - 100];
                 self->manager->assign(self->param_id, gp.first, b, gp.second);
+            } else if (result >= 200 && result - 200 < KNOB_SOURCE_COUNT) {
+                self->manager->assign_source(
+                    self->param_id, (Synth::ControllerId)KNOB_SOURCES[result - 200].id, b
+                );
             }
 
             self->update_assignment();

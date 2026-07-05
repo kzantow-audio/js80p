@@ -296,6 +296,33 @@ int ModulationManager::assign(
 }
 
 
+int ModulationManager::assign_source(
+        Synth::ParamId const dest,
+        Synth::ControllerId const source,
+        double const base_ratio
+) {
+    int const slot = allocate(Modulation::MACRO, false);
+
+    if (slot == 0) {
+        return 0;
+    }
+
+    /* The intermediate macro's input follows the source; its min/max is the
+     * unique range at this destination. */
+    bridge.assign_controller(Modulation::macro_in(slot), source);
+    bridge.set_ratio(Modulation::macro_min(slot), base_ratio);
+    bridge.set_ratio(Modulation::macro_max(slot), juce::jlimit(0.0, 1.0, base_ratio + 0.5));
+    bridge.assign_controller(dest, Modulation::controller_id(Modulation::MACRO, slot));
+
+    int const sk = slot_key(Modulation::MACRO, slot);
+    reserved.insert(sk);
+    slot_group[sk] = next_group_id++;
+    rescan();
+
+    return slot;
+}
+
+
 void ModulationManager::unassign(Synth::ParamId const dest)
 {
     Modulation::Type type;
@@ -305,6 +332,11 @@ void ModulationManager::unassign(Synth::ParamId const dest)
         int const sk = slot_key(type, index);
         reserved.erase(sk);
         slot_group.erase(sk);
+
+        /* Release an intermediate macro's input too. */
+        if (type == Modulation::MACRO) {
+            bridge.assign_controller(Modulation::macro_in(index), Synth::ControllerId::NONE);
+        }
     }
 
     bridge.assign_controller(dest, Synth::ControllerId::NONE);

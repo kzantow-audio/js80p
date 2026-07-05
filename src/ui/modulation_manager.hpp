@@ -79,6 +79,19 @@ class ModulationManager
             int const clone_from = 0
         );
 
+        /**
+         * \brief Assign a global source (macro / MIDI CC / mod wheel / ...) to
+         *        \c dest through a fresh intermediate macro that carries the
+         *        per-location range (its min/max). The source drives the
+         *        intermediate's input. Returns the intermediate slot, or 0 if the
+         *        macro pool is exhausted.
+         */
+        int assign_source(
+            Synth::ParamId const dest,
+            Synth::ControllerId const source,
+            double const base_ratio
+        );
+
         void unassign(Synth::ParamId const dest);
 
     private:

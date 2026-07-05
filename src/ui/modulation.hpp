@@ -171,6 +171,37 @@ namespace Modulation
         }
     }
 
+    /** Short label for a modulation source controller (macro / MIDI / global). */
+    inline juce::String source_short_name(Synth::ControllerId const id)
+    {
+        int const v = (int)id;
+
+        if (v >= (int)Synth::ControllerId::MACRO_1 && v <= (int)Synth::ControllerId::MACRO_8) {
+            return juce::String("M") + juce::String(v - (int)Synth::ControllerId::MACRO_1 + 1);
+        }
+
+        switch (v) {
+            case 0:   return "-";
+            case 1:   return "Mod";
+            case 2:   return "Breath";
+            case 4:   return "Foot";
+            case 7:   return "Vol";
+            case 10:  return "Pan";
+            case 11:  return "Expr";
+            case 64:  return "Sus";
+            case 71:  return "Reso";
+            case 74:  return "Cut";
+            case 91:  return "Rev";
+            case 93:  return "Cho";
+            case 128: return "Pitch";
+            case 129: return "Note";
+            case 130: return "Vel";
+            case 155: return "AT";
+            case 156: return "Lrn";
+            default:  return juce::String("CC") + juce::String(v);
+        }
+    }
+
     /**
      * \brief Friendlier destination label: oscillator params get the osc number
      *        as a suffix (MAMP -> AMP1, CAMP -> AMP2) and the four per-voice
