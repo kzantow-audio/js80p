@@ -307,11 +307,9 @@ void ModulatorCard::mouseDown(juce::MouseEvent const& event)
 
 void ModulatorCard::paint(juce::Graphics& g)
 {
-    juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(1.0f);
-    g.setColour(Theme::PANEL);   /* same as the OSC panels, not lighter */
-    g.fillRoundedRectangle(box, 4.0f);
-    g.setColour(Modulation::colour(type).withAlpha(0.5f));
-    g.drawRoundedRectangle(box, 4.0f, 1.0f);
+    /* Transparent background; a single 2px accent line on the left. */
+    g.setColour(Modulation::colour(type));
+    g.fillRect(0.0f, 0.0f, 2.0f, (float)getHeight());
 
     /* One-line header: each slot next to its destination -
      * "E1 <dest> E5 <dest> ...". */
