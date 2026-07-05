@@ -47,11 +47,12 @@ ModulatorCard::ModulatorCard(
     };
 
     if (type == Modulation::ENVELOPE) {
-        knobs.add(new Knob(bridge, Modulation::env_atk(rep), "A"));
+        knobs.add(new Knob(bridge, Modulation::env_del(rep), "DLY"));
+        knobs.add(new Knob(bridge, Modulation::env_atk(rep), "ATK"));
         knobs.getLast()->set_min_ratio(bridge.ratio_for_display(Modulation::env_atk(rep), 0.001));
-        knobs.add(new Knob(bridge, Modulation::env_hld(rep), "H"));
-        knobs.add(new Knob(bridge, Modulation::env_dec(rep), "D"));
-        knobs.add(new Knob(bridge, Modulation::env_rel(rep), "R"));
+        knobs.add(new Knob(bridge, Modulation::env_hld(rep), "HLD"));
+        knobs.add(new Knob(bridge, Modulation::env_dec(rep), "DEC"));
+        knobs.add(new Knob(bridge, Modulation::env_rel(rep), "REL"));
 
         for (Knob* const k : knobs) {
             k->set_manager(&manager);
@@ -88,7 +89,7 @@ ModulatorCard::ModulatorCard(
 
 int ModulatorCard::preferred_height() const
 {
-    return type == Modulation::LFO ? 72 : 92;
+    return 90;
 }
 
 
@@ -193,25 +194,31 @@ void ModulatorCard::resized()
         return;
     }
 
-    /* Envelope: a row of A/H/D/R knobs, with the attack/decay/release curve
-     * squares centred under their knob. */
-    juce::Rectangle<int> const curve_row = b.removeFromBottom(14);
-    b.removeFromBottom(2);
+    /* Envelope: one interspersed row -
+     * DLY | attack-curve | ATK | HLD | DEC | decay-curve | REL | release-curve. */
+    int const cw = 16;
+    int const kw = juce::jmax(30, (b.getWidth() - 3 * cw) / 5);
+    int const total = 5 * kw + 3 * cw;
+    int const h = b.getHeight();
+    int x = b.getX() + juce::jmax(0, (b.getWidth() - total) / 2);
 
-    int const n = knobs.size();
-    int const cell = n > 0 ? b.getWidth() / n : 0;
+    auto place_knob = [&](int const i) {
+        knobs[i]->setBounds(x, b.getY(), kw, h);
+        x += kw;
+    };
+    auto place_curve = [&](int const i) {
+        curves[i]->setBounds(x + (cw - cw) / 2, b.getY() + (h - cw) / 2, cw, cw);
+        x += cw;
+    };
 
-    for (int i = 0; i != n; ++i) {
-        knobs[i]->setBounds(b.getX() + i * cell, b.getY(), cell, b.getHeight());
-    }
-
-    int const cs = 14;
-    int const cols[3] = { 0, 2, 3 };   /* attack, decay, release columns */
-
-    for (int i = 0; i != curves.size(); ++i) {
-        int const x = b.getX() + cols[i] * cell + (cell - cs) / 2;
-        curves[i]->setBounds(x, curve_row.getY(), cs, cs);
-    }
+    place_knob(0);    /* DLY */
+    place_curve(0);   /* attack curve */
+    place_knob(1);    /* ATK */
+    place_knob(2);    /* HLD */
+    place_knob(3);    /* DEC */
+    place_curve(1);   /* decay curve */
+    place_knob(4);    /* REL */
+    place_curve(2);   /* release curve */
 }
 
 

@@ -45,7 +45,10 @@ JS80PEditor::JS80PEditor(JS80PProcessor& processor)
         );
     }
 
-    setSize(JS80P::GUI::INIT_WIDTH, JS80P::GUI::INIT_HEIGHT);
+    /* Larger default than the legacy INIT_SCALE (0.48) so the new GUI's
+     * per-oscillator pulse-width / harmonics section is visible without
+     * resizing. Aspect ratio stays locked to the original layout. */
+    setSize((int)(0.62 * JS80P::GUI::WIDTH_FLOAT), (int)(0.62 * JS80P::GUI::HEIGHT_FLOAT));
 
     /* Original GUI (JUCE Widget backend) — attached first, sits behind. */
     gui = new JS80P::GUI(
