@@ -37,6 +37,50 @@ static int quant(double const r)
 }
 
 
+/* The params a slot owns that can carry an incoming modulation (i.e. the
+ * places a *feeding* modulator plugs into). Freeing a dead slot means clearing
+ * whichever of these currently have a controller. */
+static void collect_slot_input_params(
+        Modulation::Type const type, int const index,
+        std::vector<Synth::ParamId>& out
+) {
+    out.clear();
+
+    if (type == Modulation::MACRO) {
+        out.push_back(Modulation::macro_in(index));
+        out.push_back(Modulation::macro_min(index));
+        out.push_back(Modulation::macro_max(index));
+        return;
+    }
+
+    if (type == Modulation::ENVELOPE) {
+        Synth::ParamId const ps[] = {
+            Modulation::env_scl(index), Modulation::env_ini(index), Modulation::env_del(index),
+            Modulation::env_atk(index), Modulation::env_pk(index),  Modulation::env_hld(index),
+            Modulation::env_dec(index), Modulation::env_sus(index), Modulation::env_rel(index),
+            Modulation::env_fin(index), Modulation::env_tin(index), Modulation::env_vin(index),
+            Modulation::env_ash(index), Modulation::env_dsh(index), Modulation::env_rsh(index),
+            Modulation::env_upd(index), Modulation::env_syn(index),
+        };
+        out.assign(std::begin(ps), std::end(ps));
+        return;
+    }
+
+    /* LFO */
+    Synth::ParamId const ps[] = {
+        Modulation::lfo_frq(index), Modulation::lfo_phs(index), Modulation::lfo_min(index),
+        Modulation::lfo_max(index), Modulation::lfo_amp(index), Modulation::lfo_dst(index),
+        Modulation::lfo_rnd(index), Modulation::lfo_wav(index), Modulation::lfo_log(index),
+        Modulation::lfo_cen(index), Modulation::lfo_syn(index), Modulation::lfo_aen(index),
+    };
+    out.assign(std::begin(ps), std::end(ps));
+
+    if (Modulation::lfo_has_pw(index)) {
+        out.push_back(Modulation::lfo_pw(index));
+    }
+}
+
+
 std::string ModulationManager::shape_key(
         Modulation::Type const type, int const index
 ) const {
@@ -203,7 +247,6 @@ void ModulationManager::rescan()
     std::sort(groups_.begin(), groups_.end(), [](Group const& a, Group const& b) {
         return a.type != b.type ? a.type < b.type : a.rep < b.rep;
     });
-
 }
 
 
@@ -390,6 +433,94 @@ void ModulationManager::reserve_group(
 }
 
 
+void ModulationManager::collect_garbage(Synth::ParamId const just_cleared)
+{
+    int const n = (int)Synth::ParamId::PARAM_ID_COUNT;
+
+    /* Snapshot of the live controller assignments. The cascade mutates this
+     * snapshot as it frees feeders, so it converges in one call regardless of
+     * when the queued writes actually drain on the audio thread. */
+    std::vector<Synth::ControllerId> ctl((size_t)n);
+
+    for (int pid = 0; pid != n; ++pid) {
+        ctl[(size_t)pid] = bridge.controller((Synth::ParamId)pid);
+    }
+
+    /* unassign() has just queued this destination to NONE; the atomic hasn't
+     * caught up, so honour the removal here. */
+    if ((int)just_cleared < n) {
+        ctl[(size_t)just_cleared] = Synth::ControllerId::NONE;
+    }
+
+    bool changed = true;
+
+    while (changed) {
+        changed = false;
+
+        /* Pool slots that still drive at least one param (from the snapshot). */
+        std::set<int> live;
+
+        for (int pid = 0; pid != n; ++pid) {
+            Modulation::Type t;
+            int i;
+
+            if (Modulation::decode(ctl[(size_t)pid], t, i)) {
+                live.insert(slot_key(t, i));
+            }
+        }
+
+        Modulation::Type const types[] = {
+            Modulation::ENVELOPE, Modulation::LFO, Modulation::MACRO
+        };
+
+        for (Modulation::Type const type : types) {
+            /* pool_first(MACRO) == 9, so the 8 performance macros are never GC'd. */
+            for (int i = Modulation::pool_first(type); i <= Modulation::pool_last(type); ++i) {
+                int const sk = slot_key(type, i);
+
+                if (live.count(sk) != 0) {
+                    continue;   /* still drives something -> keep it */
+                }
+
+                bool const tracked =
+                    reserved.count(sk) != 0 || slot_group.count(sk) != 0;
+
+                std::vector<Synth::ParamId> inputs;
+                collect_slot_input_params(type, i, inputs);
+
+                bool has_input = false;
+
+                for (Synth::ParamId const p : inputs) {
+                    if (ctl[(size_t)p] != Synth::ControllerId::NONE) {
+                        has_input = true;
+                        break;
+                    }
+                }
+
+                if (!tracked && !has_input) {
+                    continue;   /* dead but nothing to reclaim */
+                }
+
+                /* Garbage: free the modulators feeding this dead slot (which may
+                 * turn them into garbage on the next pass) and forget the slot. */
+                for (Synth::ParamId const p : inputs) {
+                    if (ctl[(size_t)p] != Synth::ControllerId::NONE) {
+                        bridge.assign_controller(p, Synth::ControllerId::NONE);
+                        ctl[(size_t)p] = Synth::ControllerId::NONE;
+                    }
+                }
+
+                reserved.erase(sk);
+                slot_group.erase(sk);
+                changed = true;
+            }
+        }
+    }
+
+    rescan();
+}
+
+
 void ModulationManager::unassign(Synth::ParamId const dest)
 {
     Modulation::Type type;
@@ -407,7 +538,10 @@ void ModulationManager::unassign(Synth::ParamId const dest)
     }
 
     bridge.assign_controller(dest, Synth::ControllerId::NONE);
-    rescan();
+
+    /* Reclaim any modulators left dangling by this removal (e.g. an LFO that
+     * only modulated a param of the slot just freed). Cascades. */
+    collect_garbage(dest);
 }
 
 }

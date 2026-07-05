@@ -108,6 +108,19 @@ class ModulationManager
 
         bool is_used(Modulation::Type const type, int const index) const;
 
+        /**
+         * \brief Cascading GC over the modulator pools. A pool slot (never the 8
+         *        performance macros) that no longer drives any Synth param is
+         *        dead: the modulators feeding *its* own params are freed and the
+         *        slot is dropped from the tracking state. Freeing a feeder can
+         *        make it dead too, so the pass repeats until it stabilises.
+         *        \c just_cleared is the destination unassign() has queued to NONE
+         *        but whose atomic hasn't drained yet, so it is treated as NONE.
+         */
+        void collect_garbage(
+            Synth::ParamId const just_cleared = Synth::ParamId::PARAM_ID_COUNT
+        );
+
         ParamBridge& bridge;
         std::vector<Group> groups_;
         std::set<int> reserved;   /* type*100 + slot; local, pre-audio-thread */
