@@ -8,6 +8,31 @@ legacy `Makefile`.
 - Adds a JUCE VST3 + Standalone target; the legacy `Makefile` build is unchanged.
 - Milestone 1 (original GUI running inside JUCE) is complete; verified on Linux.
   Windows and macOS builds are not yet verified.
+- Milestone 2 (new simplified GUI, branch `feat/juce-gui`) is in progress. It lives
+  under `src/ui/` and is reached via the editor's "Detailed view" toggle; the engine
+  and patch format are never modified.
+
+### New GUI — current features
+
+- **Two pages** via SYNTH / EFFECTS tabs centered in the header.
+  - *Synth page*: header + macro strip (macros 1-8 with per-macro MIDI-CC source) +
+    OSC 1 / MIX / OSC 2 columns + a right-third scrollable Modulators panel.
+    - Each oscillator column is one panel that also contains its two filters at the
+      bottom. MIX and MODULATORS are title-less transparent sections.
+    - A single combined **TUNING** selector (above MODE) applies to both oscillators
+      and reads OSC 1 on load.
+    - Two tiny pie-fill dot controls on each OSC title (oscillator inaccuracy /
+      instability) and on each envelope card title (time / level inaccuracy).
+  - *Effects page*: recreates the original effects chain (Input, Vol 1-3, Dist 1/2,
+    Filter 1/2, Tape, Chorus, Echo, Reverb) as panels of knobs; type selectors are
+    rendered as knobs; no LG toggles.
+- **Modulation** (see `doc/z-gui.md` §5-6): knobs are modulation-aware (rotation =
+  base, ring-band / badge drag = amount); envelope/LFO groups sharing a shape are one
+  editor card; assigning an existing modulator clones a fresh pool slot; global
+  sources (macros / CC / wheels / **Random**) route through an intermediate macro.
+  Grouped copies are modulated together; unassigning garbage-collects orphaned pool
+  slots. DTN/FIN pitch knobs snap base and amount to semitones (Ctrl = fine).
+  Envelope cards expose SCL as a modulatable slider in the card title.
 
 ## Requirements
 
