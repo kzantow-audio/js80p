@@ -132,6 +132,7 @@ Knob::Knob(
     param_id(param_id),
     label(label),
     manager(nullptr),
+    mod_caps(Modulation::CAP_ALL),
     ratio(bridge.get_ratio(param_id)),
     skew(1.0),
     min_ratio(0.0),
@@ -154,6 +155,7 @@ Knob::~Knob() = default;
 
 
 void Knob::set_manager(ModulationManager* const m) { manager = m; }
+void Knob::set_mod_caps(int const c) { mod_caps = c; }
 void Knob::set_semitone_snap(bool const on) { semitone_snap = on; }
 void Knob::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0, r); }
 
@@ -496,10 +498,20 @@ void Knob::open_assign_menu()
         menu.addSeparator();
     }
 
+    /* Copy an existing envelope/LFO group (never a macro - macros are only
+     * reached through "Modulate by"), and only kinds this destination accepts. */
     std::shared_ptr<std::vector<std::pair<Modulation::Type, int>>> const clones =
         std::make_shared<std::vector<std::pair<Modulation::Type, int>>>();
 
     for (ModulationManager::Group const& grp : manager->groups()) {
+        bool const allowed =
+            (grp.type == Modulation::ENVELOPE && (mod_caps & Modulation::CAP_ENV))
+            || (grp.type == Modulation::LFO && (mod_caps & Modulation::CAP_LFO));
+
+        if (!allowed) {
+            continue;
+        }
+
         int const id = 100 + (int)clones->size();
         clones->push_back({ grp.type, grp.rep });
         menu.addItem(id,
@@ -507,20 +519,27 @@ void Knob::open_assign_menu()
     }
 
     menu.addSeparator();
-    menu.addItem(1, "New envelope  (" + juce::String(manager->free_count(Modulation::ENVELOPE)) + ")",
-                 manager->free_count(Modulation::ENVELOPE) > 0);
-    menu.addItem(2, "New LFO  (" + juce::String(manager->free_count(Modulation::LFO)) + ")",
-                 manager->free_count(Modulation::LFO) > 0);
+
+    if (mod_caps & Modulation::CAP_ENV) {
+        menu.addItem(1, "New envelope  (" + juce::String(manager->free_count(Modulation::ENVELOPE)) + ")",
+                     manager->free_count(Modulation::ENVELOPE) > 0);
+    }
+    if (mod_caps & Modulation::CAP_LFO) {
+        menu.addItem(2, "New LFO  (" + juce::String(manager->free_count(Modulation::LFO)) + ")",
+                     manager->free_count(Modulation::LFO) > 0);
+    }
 
     /* Global sources route through an intermediate macro carrying this
      * destination's unique range. */
-    bool const have_macro = manager->free_count(Modulation::MACRO) > 0;
-    juce::PopupMenu sources;
-    for (int i = 0; i != KNOB_SOURCE_COUNT; ++i) {
-        sources.addItem(200 + i, KNOB_SOURCES[i].name, have_macro);
+    if (mod_caps & Modulation::CAP_MACRO) {
+        bool const have_macro = manager->free_count(Modulation::MACRO) > 0;
+        juce::PopupMenu sources;
+        for (int i = 0; i != KNOB_SOURCE_COUNT; ++i) {
+            sources.addItem(200 + i, KNOB_SOURCES[i].name, have_macro);
+        }
+        menu.addSubMenu("Modulate by  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
+                        sources);
     }
-    menu.addSubMenu("Modulate by  (" + juce::String(manager->free_count(Modulation::MACRO)) + ")",
-                    sources);
 
     Knob* const self = this;
     menu.showMenuAsync(

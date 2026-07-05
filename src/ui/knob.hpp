@@ -57,6 +57,9 @@ class Knob : public juce::Component
         /** Make this knob a modulation destination (right-click to assign). */
         void set_manager(ModulationManager* const manager);
 
+        /** Restrict which modulator kinds may be assigned (Modulation::Cap). */
+        void set_mod_caps(int const caps);
+
         void set_center_value(double const display_value);
         void set_semitone_snap(bool const on);
         void set_min_ratio(double const r);
@@ -107,6 +110,7 @@ class Knob : public juce::Component
         Synth::ParamId const param_id;
         juce::String const label;
         ModulationManager* manager;
+        int mod_caps;
 
         double ratio;
         double skew;

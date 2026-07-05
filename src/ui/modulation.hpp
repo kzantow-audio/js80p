@@ -40,6 +40,12 @@ namespace Modulation
 {
     enum Type { ENVELOPE, LFO, MACRO };
 
+    /* Which modulator kinds a destination accepts (matches the engine's
+     * per-param capability): oscillator/filter = all; envelope params take only
+     * macros; LFO params take LFOs + macros. Macros are always reached through
+     * the "Modulate by" menu (never offered as a copyable group). */
+    enum Cap { CAP_ENV = 1, CAP_LFO = 2, CAP_MACRO = 4, CAP_ALL = 7 };
+
     static constexpr int ENVELOPE_COUNT = 12;
     static constexpr int LFO_COUNT = 8;
     /* Macros 1-8 are the top performance strip; 9-30 back auto-modulation. */

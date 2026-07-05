@@ -56,6 +56,7 @@ ModulatorCard::ModulatorCard(
 
         for (Knob* const k : knobs) {
             k->set_manager(&manager);
+            k->set_mod_caps(Modulation::CAP_MACRO);   /* envelope params: macros only */
         }
 
         curves.add(new CurveSelector(bridge, build_curve(Modulation::env_ash), false));
@@ -79,6 +80,11 @@ ModulatorCard::ModulatorCard(
         knobs.add(new Knob(bridge, Modulation::lfo_phs(rep), "PHS"));
         knobs.add(new Knob(bridge, Modulation::lfo_dst(rep), "DIST"));
         knobs.add(new Knob(bridge, Modulation::lfo_rnd(rep), "RAND"));
+
+        for (Knob* const k : knobs) {
+            k->set_manager(&manager);
+            k->set_mod_caps(Modulation::CAP_LFO | Modulation::CAP_MACRO);   /* LFOs + macros */
+        }
     }
 
     for (Knob* const k : knobs) {
