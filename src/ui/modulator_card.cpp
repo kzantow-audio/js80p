@@ -308,7 +308,7 @@ void ModulatorCard::mouseDown(juce::MouseEvent const& event)
 void ModulatorCard::paint(juce::Graphics& g)
 {
     juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(1.0f);
-    g.setColour(Theme::PANEL_2);
+    g.setColour(Theme::PANEL);   /* same as the OSC panels, not lighter */
     g.fillRoundedRectangle(box, 4.0f);
     g.setColour(Modulation::colour(type).withAlpha(0.5f));
     g.drawRoundedRectangle(box, 4.0f, 1.0f);

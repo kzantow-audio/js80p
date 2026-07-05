@@ -80,6 +80,7 @@ class NewGui : public juce::Component, private juce::Timer
         );
         void lay_out_mix(juce::Rectangle<int> panel, Selector* mode, std::vector<Knob*>& knobs);
         void draw_panel(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
+        void draw_section_title(juce::Graphics& g, juce::Rectangle<int> const& r, char const* const title) const;
 
         void rebuild_cards();
         void layout_cards();

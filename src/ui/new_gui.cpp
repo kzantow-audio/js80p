@@ -305,7 +305,7 @@ void NewGui::layout_cards()
 
     for (ModulatorCard* const card : cards) {
         int const h = card->preferred_height();
-        card->setBounds(6, y, juce::jmax(0, w - 12), h);
+        card->setBounds(0, y, juce::jmax(0, w), h);
         y += h + 6;
     }
 
@@ -355,10 +355,9 @@ void NewGui::resized()
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
 
     juce::Rectangle<int> mv = mod_bounds;
-    mv.removeFromTop(28);          /* panel title */
-    mv = mv.reduced(4, 0);
+    mv.removeFromTop(28);          /* section title */
     mv.removeFromBottom(6);
-    mod_viewport.setBounds(mv);
+    mod_viewport.setBounds(mv);    /* no horizontal padding: cards span the width */
 
     layout_cards();
 }
@@ -426,6 +425,22 @@ void NewGui::lay_out_mix(
 }
 
 
+void NewGui::draw_section_title(
+        juce::Graphics& g,
+        juce::Rectangle<int> const& r,
+        char const* const title
+) const {
+    g.setColour(Theme::TEXT_DIM);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
+    g.drawText(
+        title,
+        r.reduced(14, 10).removeFromTop(18),
+        juce::Justification::centredLeft,
+        false
+    );
+}
+
+
 void NewGui::draw_panel(
         juce::Graphics& g,
         juce::Rectangle<int> const& r,
@@ -436,14 +451,7 @@ void NewGui::draw_panel(
     g.setColour(Theme::EDGE);
     g.drawRoundedRectangle(r.toFloat().reduced(0.5f), Theme::RADIUS, 1.0f);
 
-    g.setColour(Theme::TEXT_DIM);
-    g.setFont(juce::Font(juce::FontOptions().withHeight(13.0f).withStyle("Bold")));
-    g.drawText(
-        title,
-        r.reduced(14, 10).removeFromTop(18),
-        juce::Justification::centredLeft,
-        false
-    );
+    draw_section_title(g, r, title);
 }
 
 
@@ -470,10 +478,10 @@ void NewGui::paint(juce::Graphics& g)
     );
 
     draw_panel(g, osc1_bounds, "OSC 1  (modulator)");
-    draw_panel(g, mix_bounds, "MIX");
+    draw_section_title(g, mix_bounds, "MIX");   /* transparent: no box */
     draw_panel(g, osc2_bounds, "OSC 2  (carrier)");
 
-    draw_panel(g, mod_bounds, "MODULATORS");
+    draw_section_title(g, mod_bounds, "MODULATORS");   /* transparent: cards are the boxes */
 
     if (cards.isEmpty()) {
         g.setColour(Theme::TEXT_FAINT);
