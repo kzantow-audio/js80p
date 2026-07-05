@@ -21,6 +21,7 @@
 
 #include "ui/vslider.hpp"
 
+#include "dsp/math.hpp"
 #include "ui/theme.hpp"
 
 
@@ -39,6 +40,7 @@ VSlider::VSlider(
     ratio(0.0),
     min_ratio(0.0),
     curve_index(0),
+    curve_falling(false),
     dragging_curve(false),
     drag_start_ratio(0.0),
     drag_start_curve(0)
@@ -55,6 +57,12 @@ VSlider::VSlider(
 void VSlider::set_min_ratio(double const r)
 {
     min_ratio = juce::jlimit(0.0, 1.0, r);
+}
+
+
+void VSlider::set_curve_falling(bool const falling)
+{
+    curve_falling = falling;
 }
 
 
@@ -95,10 +103,8 @@ juce::Rectangle<int> VSlider::curve_rect() const
         return {};
     }
 
-    int const w = getWidth() - BAR_W - 5;
-    int const top = 27;   /* below name + value rows */
-    int const h = juce::jmin(30, getHeight() - top - 2);
-    return juce::Rectangle<int>(1, top, w, juce::jmax(0, h));
+    /* A tiny square, same width as the bar, under the name + value. */
+    return juce::Rectangle<int>(1, 27, BAR_W, BAR_W);
 }
 
 
@@ -145,28 +151,30 @@ void VSlider::paint(juce::Graphics& g)
     g.setFont(10.0f);
     g.drawText(vs, text.getX(), 13, text.getWidth(), 12, juce::Justification::topLeft, false);
 
-    /* Curvature picker glyph (drag up/down to cycle). */
+    /* Curvature picker: the actual hardcoded envelope shape, drag/wheel cycles. */
     if (!curve_targets.empty()) {
         juce::Rectangle<int> const cr = curve_rect();
         g.setColour(Theme::INSET);
         g.fillRoundedRectangle(cr.toFloat(), 2.0f);
 
-        int const count = juce::jmax(2, bridge.option_count(curve_targets.front()));
-        double const t = (double)curve_index / (double)(count - 1);
-        double const gamma = std::pow(4.0, (t - 0.5) * 2.0);
-
-        juce::Rectangle<float> const in = cr.toFloat().reduced(3.0f);
+        int const linear = 12;   /* SHAPE_LINEAR; not in Math::EnvelopeShape (0-11) */
+        juce::Rectangle<float> const in = cr.toFloat().reduced(2.0f);
         juce::Path curve;
-        for (int i = 0; i <= 16; ++i) {
-            double const x = (double)i / 16.0;
-            double const yv = std::pow(x, gamma);
+        for (int i = 0; i <= 14; ++i) {
+            double const x = (double)i / 14.0;
+            double y = curve_index >= linear
+                ? x
+                : (double)Math::apply_envelope_shape((Math::EnvelopeShape)curve_index, (Number)x);
+            if (curve_falling) {
+                y = 1.0 - y;
+            }
             float const px = in.getX() + (float)x * in.getWidth();
-            float const py = in.getBottom() - (float)yv * in.getHeight();
+            float const py = in.getBottom() - (float)y * in.getHeight();
             if (i == 0) curve.startNewSubPath(px, py);
             else curve.lineTo(px, py);
         }
         g.setColour(Theme::ENV);
-        g.strokePath(curve, juce::PathStrokeType(1.5f));
+        g.strokePath(curve, juce::PathStrokeType(1.4f));
     }
 
     /* Bar. */
@@ -218,6 +226,18 @@ void VSlider::mouseDoubleClick(juce::MouseEvent const& event)
     }
 
     write_ratio(bridge.get_default_ratio(value_targets.front()));
+}
+
+
+void VSlider::mouseWheelMove(
+        juce::MouseEvent const& event, juce::MouseWheelDetails const& wheel
+) {
+    if (!curve_targets.empty() && curve_rect().contains(event.getPosition())) {
+        set_curve(curve_index + (wheel.deltaY > 0.0f ? 1 : -1));
+        return;
+    }
+
+    write_ratio(ratio + (double)wheel.deltaY * 0.04);
 }
 
 }

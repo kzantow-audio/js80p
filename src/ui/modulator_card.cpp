@@ -50,8 +50,12 @@ ModulatorCard::ModulatorCard(
         atk->set_min_ratio(bridge.ratio_for_display(Modulation::env_atk(rep), 0.001));
         sliders.add(atk);
         sliders.add(new VSlider(bridge, build(Modulation::env_hld), "H"));
-        sliders.add(new VSlider(bridge, build(Modulation::env_dec), "D", build(Modulation::env_dsh)));
-        sliders.add(new VSlider(bridge, build(Modulation::env_rel), "R", build(Modulation::env_rsh)));
+        VSlider* const dec = new VSlider(bridge, build(Modulation::env_dec), "D", build(Modulation::env_dsh));
+        dec->set_curve_falling(true);
+        sliders.add(dec);
+        VSlider* const rel = new VSlider(bridge, build(Modulation::env_rel), "R", build(Modulation::env_rsh));
+        rel->set_curve_falling(true);
+        sliders.add(rel);
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         addAndMakeVisible(*wave);
@@ -158,7 +162,7 @@ void ModulatorCard::paint(juce::Graphics& g)
         g.drawText(slot, x, 3, right - x, 14, juce::Justification::centredLeft, false);
         x += (int)juce::GlyphArrangement::getStringWidth(sf, slot) + 4;
 
-        juce::String const dest = juce::String(bridge.param_name(c.second).c_str());
+        juce::String const dest = Modulation::display_dest_name(bridge.param_name(c.second));
         g.setFont(df);
         g.setColour(Theme::TEXT_DIM);
         g.drawText(dest, x, 3, right - x, 14, juce::Justification::centredLeft, false);

@@ -55,7 +55,7 @@ class ModulationManager
         };
 
         explicit ModulationManager(ParamBridge& bridge) noexcept
-            : bridge(bridge)
+            : bridge(bridge), next_group_id(1)
         {
         }
 
@@ -92,6 +92,11 @@ class ModulationManager
         ParamBridge& bridge;
         std::vector<Group> groups_;
         std::set<int> reserved;   /* type*100 + slot; local, pre-audio-thread */
+        /* slot_key -> stable group id: membership persists across rescans so a
+         * transient value difference (queued write not yet drained) can't split
+         * a group mid-edit. New slots (e.g. from a loaded patch) join by shape. */
+        std::map<int, int> slot_group;
+        int next_group_id;
 };
 
 }

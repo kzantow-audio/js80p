@@ -88,7 +88,7 @@ bool ModulationManager::is_used(Modulation::Type const type, int const index) co
 
 void ModulationManager::rescan()
 {
-    /* slot (type,index) -> destinations */
+    /* slot_key -> destinations, from the live engine assignments. */
     std::map<int, std::vector<Synth::ParamId>> used;
 
     for (int pid = 0; pid != (int)Synth::ParamId::PARAM_ID_COUNT; ++pid) {
@@ -100,40 +100,80 @@ void ModulationManager::rescan()
         }
     }
 
-    /* Bucket used slots by (type, shape key). */
-    std::map<std::string, Group> buckets;
+    /* Drop slots that are no longer assigned (and not pending). */
+    for (std::map<int, int>::iterator it = slot_group.begin(); it != slot_group.end(); ) {
+        if (used.count(it->first) == 0 && reserved.count(it->first) == 0) {
+            it = slot_group.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
+    /* Give each newly-seen slot a group id: match an existing group's shape
+     * (for loaded patches) or start a fresh group. */
     for (std::map<int, std::vector<Synth::ParamId>>::const_iterator it = used.begin();
             it != used.end(); ++it) {
-        Modulation::Type const type = (Modulation::Type)(it->first / 100);
-        int const index = it->first % 100;
-        std::string const bkey = std::to_string((int)type) + "|" + shape_key(type, index);
+        int const sk = it->first;
 
-        Group& g = buckets[bkey];
+        if (slot_group.count(sk) != 0) {
+            continue;
+        }
+
+        Modulation::Type const type = (Modulation::Type)(sk / 100);
+        std::string const key = shape_key(type, sk % 100);
+        int gid = -1;
+
+        for (std::map<int, int>::const_iterator og = slot_group.begin();
+                og != slot_group.end(); ++og) {
+            int const osk = og->first;
+
+            if ((Modulation::Type)(osk / 100) == type
+                    && shape_key(type, osk % 100) == key) {
+                gid = og->second;
+                break;
+            }
+        }
+
+        slot_group[sk] = gid < 0 ? next_group_id++ : gid;
+    }
+
+    /* Build the group list from the persistent membership map. */
+    std::map<int, Group> by_gid;
+
+    for (std::map<int, int>::const_iterator it = slot_group.begin();
+            it != slot_group.end(); ++it) {
+        int const sk = it->first;
+        Modulation::Type const type = (Modulation::Type)(sk / 100);
+        int const index = sk % 100;
+
+        Group& g = by_gid[it->second];
         g.type = type;
         g.members.push_back(index);
-        g.destinations.insert(g.destinations.end(), it->second.begin(), it->second.end());
 
-        for (Synth::ParamId const dest : it->second) {
-            g.connections.push_back({ index, dest });
+        std::map<int, std::vector<Synth::ParamId>>::const_iterator u = used.find(sk);
+        if (u != used.end()) {
+            for (Synth::ParamId const dest : u->second) {
+                g.destinations.push_back(dest);
+                g.connections.push_back({ index, dest });
+            }
         }
     }
 
     groups_.clear();
 
-    for (std::map<std::string, Group>::iterator it = buckets.begin();
-            it != buckets.end(); ++it) {
+    for (std::map<int, Group>::iterator it = by_gid.begin(); it != by_gid.end(); ++it) {
         Group& g = it->second;
         std::sort(g.members.begin(), g.members.end());
+        std::sort(g.connections.begin(), g.connections.end());
         g.rep = g.members.empty() ? 0 : g.members.front();
         groups_.push_back(g);
     }
 
-    /* Stable order by type then representative slot, so a card keeps its place
-     * as its shape (and thus its shape-key bucket) changes. */
+    /* Stable order by type then representative slot. */
     std::sort(groups_.begin(), groups_.end(), [](Group const& a, Group const& b) {
         return a.type != b.type ? a.type < b.type : a.rep < b.rep;
     });
+
 }
 
 
@@ -240,7 +280,16 @@ int ModulationManager::assign(
     bridge.set_ratio(Modulation::depth_param(type, slot), target);
 
     bridge.assign_controller(dest, Modulation::controller_id(type, slot));
-    reserved.insert(slot_key(type, slot));
+
+    int const sk = slot_key(type, slot);
+    reserved.insert(sk);
+
+    /* Join the cloned group, or start a new one. */
+    int const src = clone_from > 0 ? slot_key(type, clone_from) : 0;
+    slot_group[sk] = (src != 0 && slot_group.count(src) != 0)
+        ? slot_group[src]
+        : next_group_id++;
+
     rescan();
 
     return slot;
@@ -253,7 +302,9 @@ void ModulationManager::unassign(Synth::ParamId const dest)
     int index;
 
     if (Modulation::decode(bridge.controller(dest), type, index)) {
-        reserved.erase(slot_key(type, index));
+        int const sk = slot_key(type, index);
+        reserved.erase(sk);
+        slot_group.erase(sk);
     }
 
     bridge.assign_controller(dest, Synth::ControllerId::NONE);

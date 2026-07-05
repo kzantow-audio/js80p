@@ -170,6 +170,42 @@ namespace Modulation
             default:       return "M";
         }
     }
+
+    /**
+     * \brief Friendlier destination label: oscillator params get the osc number
+     *        as a suffix (MAMP -> AMP1, CAMP -> AMP2) and the four per-voice
+     *        filters are numbered 1-4 (MF1->F1, MF2->F2, CF1->F3, CF2->F4), so
+     *        e.g. CF1FRQ -> F3FRQ. Other names pass through unchanged.
+     */
+    inline juce::String display_dest_name(std::string const& raw)
+    {
+        juce::String s(raw.c_str());
+
+        static char const* const fpre[4] = { "MF1", "MF2", "CF1", "CF2" };
+        static char const* const fnum[4] = { "F1", "F2", "F3", "F4" };
+
+        for (int i = 0; i != 4; ++i) {
+            if (s.startsWith(fpre[i])) {
+                return juce::String(fnum[i]) + s.substring(3);
+            }
+        }
+
+        if (s.length() > 1 && (s[0] == 'M' || s[0] == 'C')) {
+            juce::String const rest = s.substring(1);
+            static char const* const suf[] = {
+                "AMP", "VS", "WID", "PAN", "DTN", "FIN", "PRD", "PRT",
+                "VOL", "FLD", "WFM", "PW", "SUB", "N", "DL"
+            };
+
+            for (char const* const x : suf) {
+                if (rest == x) {
+                    return rest + juce::String(s[0] == 'M' ? "1" : "2");
+                }
+            }
+        }
+
+        return s;
+    }
 }
 
 }

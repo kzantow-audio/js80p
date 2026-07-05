@@ -452,13 +452,18 @@ void Knob::mouseUp(juce::MouseEvent const& /* event */)
 }
 
 
-void Knob::mouseDoubleClick(juce::MouseEvent const& /* event */)
+void Knob::mouseDoubleClick(juce::MouseEvent const& event)
 {
     if (assigned) {
-        apply_depth(0.5);
-    } else {
-        commit(bridge.get_default_ratio(param_id));
+        if (badge_rect().expanded(3.0f).contains(event.position)) {
+            apply_depth(0.0);   /* upper bound = lower bound: no modulation */
+        } else {
+            apply_base(bridge.get_default_ratio(param_id));   /* reset base */
+        }
+        return;
     }
+
+    commit(bridge.get_default_ratio(param_id));
 }
 
 
