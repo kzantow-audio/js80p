@@ -65,6 +65,7 @@ target_sources(JS80P PRIVATE
   src/ui/macro_cell.cpp
   src/ui/macro_strip.cpp
   src/ui/modulator_card.cpp
+  src/ui/effects_page.cpp
   src/ui/new_gui.cpp
   src/plugin/juce/PluginProcessor.cpp
   src/plugin/juce/PluginEditor.cpp)

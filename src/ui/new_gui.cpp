@@ -44,6 +44,8 @@ NewGui::NewGui(Synth& synth)
     : bridge(synth),
     manager(bridge),
     macro_strip(bridge),
+    effects_page(bridge),
+    active_page(Page::SYNTH),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
@@ -69,6 +71,9 @@ NewGui::NewGui(Synth& synth)
     init_button.setWantsKeyboardFocus(false);
     init_button.onClick = [this]() { init_patch(); };
     addAndMakeVisible(init_button);
+
+    /* The EFFECTS page shares the body area; hidden until its tab is active. */
+    addChildComponent(effects_page);
 
     /* Osc 1 (modulator). */
     osc1_wave = add_wave(Synth::ParamId::MWFM);
@@ -136,6 +141,12 @@ NewGui::NewGui(Synth& synth)
     /* Osc 2 (carrier) inaccuracy + instability dots. */
     osc2_inacc = add_dot(Synth::ParamId::COIA, "Oscillator inaccuracy");
     osc2_instab = add_dot(Synth::ParamId::COIS, "Oscillator instability");
+
+    /* Apply the initial page's visibility (synth children start visible). */
+    if (active_page != Page::SYNTH) {
+        set_synth_visible(false);
+        effects_page.setVisible(true);
+    }
 
     startTimerHz(30);
 }
@@ -261,6 +272,68 @@ void NewGui::timerCallback()
     }
 
     macro_strip.refresh();
+
+    if (active_page == Page::EFFECTS) {
+        effects_page.refresh();
+    }
+}
+
+
+void NewGui::set_synth_visible(bool const visible)
+{
+    macro_strip.setVisible(visible);
+    mod_viewport.setVisible(visible);
+
+    for (Knob* const knob : knobs) {
+        knob->setVisible(visible);
+    }
+    for (DotControl* const dot : dots) {
+        dot->setVisible(visible);
+    }
+    for (WaveformSelector* const wave : waves) {
+        wave->setVisible(visible);
+    }
+    for (Selector* const selector : selectors) {
+        selector->setVisible(visible);
+    }
+    for (FilterPanel* const filter : filters) {
+        filter->setVisible(visible);
+    }
+    for (PerTypeEditor* const editor : type_editors) {
+        editor->setVisible(visible);
+    }
+}
+
+
+void NewGui::set_page(Page const page)
+{
+    if (page == active_page) {
+        return;
+    }
+
+    active_page = page;
+
+    bool const synth = (page == Page::SYNTH);
+    set_synth_visible(synth);
+    effects_page.setVisible(!synth);
+
+    if (!synth) {
+        effects_page.refresh();
+    }
+
+    repaint();
+}
+
+
+void NewGui::mouseUp(juce::MouseEvent const& event)
+{
+    juce::Point<int> const p = event.getPosition();
+
+    if (tab_synth_bounds.contains(p)) {
+        set_page(Page::SYNTH);
+    } else if (tab_effects_bounds.contains(p)) {
+        set_page(Page::EFFECTS);
+    }
 }
 
 
@@ -358,6 +431,24 @@ void NewGui::resized()
 
     header_bounds = area.removeFromTop(46);
     init_button.setBounds(header_bounds.getX() + 96, header_bounds.getCentreY() - 11, 52, 22);
+
+    /* SYNTH / EFFECTS tabs, centred in the header row. */
+    {
+        int const tab_w = 92;
+        int const tab_h = 24;
+        int const tab_gap = 4;
+        int const total = 2 * tab_w + tab_gap;
+        int const x0 = header_bounds.getCentreX() - total / 2;
+        int const ty = header_bounds.getCentreY() - tab_h / 2;
+        tab_synth_bounds = juce::Rectangle<int>(x0, ty, tab_w, tab_h);
+        tab_effects_bounds = juce::Rectangle<int>(x0 + tab_w + tab_gap, ty, tab_w, tab_h);
+    }
+
+    /* The EFFECTS page fills the whole area below the header (the macro strip is
+     * hidden on that page), inset to match the synth body padding. */
+    body_bounds = area.reduced(5, 5);
+    effects_page.setBounds(body_bounds);
+
     macro_strip.setBounds(area.removeFromTop(66));
     area.reduce(5, 5);
 
@@ -520,6 +611,27 @@ void NewGui::draw_panel(
 }
 
 
+void NewGui::paint_tabs(juce::Graphics& g)
+{
+    struct { juce::Rectangle<int> const& r; char const* label; bool on; } const tabs[2] = {
+        { tab_synth_bounds, "SYNTH", active_page == Page::SYNTH },
+        { tab_effects_bounds, "EFFECTS", active_page == Page::EFFECTS },
+    };
+
+    g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
+
+    for (auto const& tab : tabs) {
+        juce::Rectangle<float> const rf = tab.r.toFloat();
+        g.setColour(tab.on ? Theme::ACCENT : Theme::INSET);
+        g.fillRoundedRectangle(rf, 3.0f);
+        g.setColour(tab.on ? Theme::ACCENT : Theme::EDGE);
+        g.drawRoundedRectangle(rf.reduced(0.5f), 3.0f, 1.0f);
+        g.setColour(tab.on ? Theme::BG : Theme::TEXT_DIM);
+        g.drawText(tab.label, tab.r, juce::Justification::centred, false);
+    }
+}
+
+
 void NewGui::paint(juce::Graphics& g)
 {
     g.fillAll(Theme::BG);
@@ -541,6 +653,12 @@ void NewGui::paint(juce::Graphics& g)
         juce::Justification::centredRight,
         false
     );
+
+    paint_tabs(g);
+
+    if (active_page == Page::EFFECTS) {
+        return;
+    }
 
     draw_panel(g, osc1_panel_bounds, "OSC 1  (modulator)");
     draw_panel(g, osc2_panel_bounds, "OSC 2  (carrier)");

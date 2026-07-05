@@ -29,6 +29,7 @@
 #include <string>
 
 #include "ui/dot_control.hpp"
+#include "ui/effects_page.hpp"
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
 #include "ui/macro_strip.hpp"
@@ -54,14 +55,21 @@ namespace JS80P
 class NewGui : public juce::Component, private juce::Timer
 {
     public:
+        enum class Page { SYNTH, EFFECTS };
+
         explicit NewGui(Synth& synth);
         ~NewGui() override;
 
         void paint(juce::Graphics& g) override;
         void resized() override;
+        void mouseUp(juce::MouseEvent const& event) override;
 
     private:
         void timerCallback() override;
+
+        void set_page(Page const page);
+        void set_synth_visible(bool const visible);
+        void paint_tabs(juce::Graphics& g);
 
         Knob& add_knob(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
         DotControl* add_dot(Synth::ParamId const id, char const* const tooltip);
@@ -92,6 +100,8 @@ class NewGui : public juce::Component, private juce::Timer
         juce::TextButton init_button;
         ModulationManager manager;
         MacroStrip macro_strip;
+        EffectsPage effects_page;
+        Page active_page;
         juce::Viewport mod_viewport;
         juce::Component mod_content;
         juce::OwnedArray<ModulatorCard> cards;
@@ -124,6 +134,9 @@ class NewGui : public juce::Component, private juce::Timer
         std::vector<Knob*> mix;
 
         juce::Rectangle<int> header_bounds;
+        juce::Rectangle<int> tab_synth_bounds;
+        juce::Rectangle<int> tab_effects_bounds;
+        juce::Rectangle<int> body_bounds;
         juce::Rectangle<int> osc1_bounds;
         juce::Rectangle<int> osc1_panel_bounds;   /* full column incl. filters */
         juce::Rectangle<int> mix_bounds;
