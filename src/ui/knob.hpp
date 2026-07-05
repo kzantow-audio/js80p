@@ -71,6 +71,10 @@ class Knob : public juce::Component
 
         void refresh();
 
+        /** Vertical drag distance (px) that spans the full 0..1 range; shared
+         *  with the other value controls so they all feel the same. */
+        static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
+
         void paint(juce::Graphics& g) override;
         bool hitTest(int x, int y) override;
         void mouseDown(juce::MouseEvent const& event) override;
@@ -85,7 +89,6 @@ class Knob : public juce::Component
     private:
         friend class ModBadge;
 
-        static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
         static constexpr double WHEEL_STEP = 0.04;
         static constexpr float RING_BAND = 10.0f;   /* clickable band outside the circle */
 

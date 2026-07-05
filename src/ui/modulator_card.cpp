@@ -105,6 +105,18 @@ ModulatorCard::ModulatorCard(
         /* SCL lives in the middle of the header row (not among the knobs). */
         env_scale = std::make_unique<EnvScaleSlider>(bridge, manager, rep, members);
         addAndMakeVisible(*env_scale);
+
+        /* Two tiny pie dots in the header's far-right band: time inaccuracy and
+         * level inaccuracy, mirrored onto every grouped member. */
+        tin_dot = std::make_unique<DotControl>(bridge, Modulation::env_tin(rep));
+        tin_dot->set_mirrors(mirror(Modulation::env_tin));
+        tin_dot->setTooltip("Envelope time inaccuracy");
+        addAndMakeVisible(*tin_dot);
+
+        vin_dot = std::make_unique<DotControl>(bridge, Modulation::env_vin(rep));
+        vin_dot->set_mirrors(mirror(Modulation::env_vin));
+        vin_dot->setTooltip("Envelope level inaccuracy");
+        addAndMakeVisible(*vin_dot);
     } else if (type == Modulation::LFO) {
         wave = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         wave->set_single(true);
@@ -216,6 +228,14 @@ void ModulatorCard::refresh()
         env_scale->refresh();
     }
 
+    if (tin_dot != nullptr) {
+        tin_dot->refresh();
+    }
+
+    if (vin_dot != nullptr) {
+        vin_dot->refresh();
+    }
+
     for (Knob* const k : knobs) {
         k->refresh();
     }
@@ -249,6 +269,16 @@ void ModulatorCard::resized()
         scl_x = juce::jmin(scl_x, getWidth() - far_right - scl_w);
         scl_x = juce::jmax(scl_x, 8);
         env_scale->setBounds(scl_x, scl_y, scl_w, scl_h);
+    }
+
+    /* Time / level inaccuracy dots in the reserved far-right header band. */
+    if (tin_dot != nullptr && vin_dot != nullptr) {
+        int const sz = 12;
+        int const gap = 5;
+        int const right = getWidth() - 6;
+        int const y = 11 - sz / 2;   /* centre on the header line (y 3..19) */
+        vin_dot->setBounds(right - sz, y, sz, sz);
+        tin_dot->setBounds(right - 2 * sz - gap, y, sz, sz);
     }
 
     b.removeFromTop(16);   /* one-line header */

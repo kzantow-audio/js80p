@@ -51,7 +51,11 @@ NewGui::NewGui(Synth& synth)
     osc1_filters(nullptr),
     osc2_filters(nullptr),
     osc1_type(nullptr),
-    osc2_type(nullptr)
+    osc2_type(nullptr),
+    osc1_inacc(nullptr),
+    osc1_instab(nullptr),
+    osc2_inacc(nullptr),
+    osc2_instab(nullptr)
 {
     setOpaque(true);
 
@@ -90,6 +94,10 @@ NewGui::NewGui(Synth& synth)
     type_editors.add(osc1_type);
     addAndMakeVisible(osc1_type);
 
+    /* Osc 1 (modulator) inaccuracy + instability dots. */
+    osc1_inacc = add_dot(Synth::ParamId::MOIA, "Oscillator inaccuracy");
+    osc1_instab = add_dot(Synth::ParamId::MOIS, "Oscillator instability");
+
     /* Mix column. */
     mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
     /* Single combined per-oscillator tuning: reads/displays OSC 1 (modulator)
@@ -125,6 +133,10 @@ NewGui::NewGui(Synth& synth)
     type_editors.add(osc2_type);
     addAndMakeVisible(osc2_type);
 
+    /* Osc 2 (carrier) inaccuracy + instability dots. */
+    osc2_inacc = add_dot(Synth::ParamId::COIA, "Oscillator inaccuracy");
+    osc2_instab = add_dot(Synth::ParamId::COIS, "Oscillator instability");
+
     startTimerHz(30);
 }
 
@@ -147,6 +159,17 @@ Knob& NewGui::add_knob(
     addAndMakeVisible(knob);
 
     return *knob;
+}
+
+
+DotControl* NewGui::add_dot(Synth::ParamId const id, char const* const tooltip)
+{
+    DotControl* const dot = new DotControl(bridge, id);
+    dot->setTooltip(tooltip);
+    dots.add(dot);
+    addAndMakeVisible(dot);
+
+    return dot;
 }
 
 
@@ -217,6 +240,9 @@ void NewGui::timerCallback()
 
     for (Knob* const knob : knobs) {
         knob->refresh();
+    }
+    for (DotControl* const dot : dots) {
+        dot->refresh();
     }
     for (WaveformSelector* const wave : waves) {
         wave->refresh();
@@ -370,6 +396,20 @@ void NewGui::resized()
     lay_out_osc(osc1_bounds, osc1_wave, osc1, osc1_type);
     lay_out_mix(mix_bounds, mode_selector, tuning_selector, mix);
     lay_out_osc(osc2_bounds, osc2_wave, osc2, osc2_type);
+
+    /* Two tiny pie dots right-aligned in each oscillator's title row,
+     * vertically centred on the 13px title text (see draw_section_title). */
+    auto place_dots = [](
+            juce::Rectangle<int> const& panel, DotControl* const a, DotControl* const b) {
+        int const sz = 12;
+        int const gap = 5;
+        int const right = panel.getRight() - 10;
+        int const y = panel.getY() + 19 - sz / 2;   /* title text centre */
+        b->setBounds(right - sz, y, sz, sz);                 /* instability (rightmost) */
+        a->setBounds(right - 2 * sz - gap, y, sz, sz);       /* inaccuracy */
+    };
+    place_dots(osc1_panel_bounds, osc1_inacc, osc1_instab);
+    place_dots(osc2_panel_bounds, osc2_inacc, osc2_instab);
 
     juce::Rectangle<int> mv = mod_bounds;
     mv.removeFromBottom(6);
