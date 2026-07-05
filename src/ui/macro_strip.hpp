@@ -19,14 +19,12 @@
 #ifndef JS80P__UI__MACRO_STRIP_HPP
 #define JS80P__UI__MACRO_STRIP_HPP
 
-#include <vector>
-
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
 #include "synth.hpp"
 
-#include "ui/knob.hpp"
+#include "ui/macro_cell.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -34,9 +32,9 @@ namespace JS80P
 {
 
 /**
- * \brief The top performance strip: macros 1-8 as always-visible knobs, each
- *        with a MIDI-CC input selector (assigns the macro's M{n}IN param to a
- *        CC controller). No other modulation options here. See doc/z-gui.md 5.4.
+ * \brief The top performance strip: macros 1-8, each a MacroCell whose rotary is
+ *        the macro's minimum output and whose source badge sets the maximum (the
+ *        CC modulation range) and picks the MIDI input source. See doc/z-gui.md.
  */
 class MacroStrip : public juce::Component
 {
@@ -49,15 +47,9 @@ class MacroStrip : public juce::Component
 
         void paint(juce::Graphics& g) override;
         void resized() override;
-        void mouseDown(juce::MouseEvent const& event) override;
 
     private:
-        juce::Rectangle<int> cc_area(int const macro) const;
-        juce::String cc_label(int const macro) const;
-        void open_cc_menu(int const macro);
-
-        ParamBridge& bridge;
-        juce::OwnedArray<Knob> knobs;
+        juce::OwnedArray<MacroCell> cells;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroStrip)
 };
