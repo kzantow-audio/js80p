@@ -173,8 +173,7 @@ void MacroCell::paint(juce::Graphics& g)
     float const cx = kb.getCentreX();
     float const cy = kb.getCentreY();
     float const r = kb.getWidth() * 0.5f;
-    juce::Colour const active =
-        Modulation::assigned_colour(Modulation::MACRO, bridge.controller(in_p));
+    juce::Colour const active = Theme::MIDI;   /* macro strip is always magenta */
 
     juce::PathStrokeType const stroke(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
 
