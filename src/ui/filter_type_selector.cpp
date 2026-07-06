@@ -48,11 +48,19 @@ static float const* filter_glyph_points(int const type, int& point_count)
 }
 
 
+/* Fixed 3-column grouping (col, row) per type index. Types are ordered
+ * LP HP BP Notch Bell LS HS, so:
+ *   col 0: LP, HP, BP        col 1: Notch, Peak(Bell)     col 2: LS, HS   */
+static constexpr int GRID_COLS = 3;
+static constexpr int GRID_ROWS = 3;
+static constexpr int CELL_COL[FilterTypeSelector::COUNT] = { 0, 0, 0, 1, 1, 2, 2 };
+static constexpr int CELL_ROW[FilterTypeSelector::COUNT] = { 0, 1, 2, 0, 1, 0, 1 };
+
+
 FilterTypeSelector::FilterTypeSelector(
-        ParamBridge& bridge, Synth::ParamId const param_id, int const columns
+        ParamBridge& bridge, Synth::ParamId const param_id
 ) : bridge(bridge),
     param_id(param_id),
-    columns(juce::jlimit(1, COUNT, columns)),
     selected(bridge.get_discrete(param_id))
 {
     setWantsKeyboardFocus(false);
@@ -97,15 +105,12 @@ void FilterTypeSelector::draw_glyph(
 
 void FilterTypeSelector::paint(juce::Graphics& g)
 {
-    int const rows = (COUNT + columns - 1) / columns;
-    int const w = getWidth() / columns;
-    int const h = getHeight() / rows;
+    int const w = getWidth() / GRID_COLS;
+    int const h = getHeight() / GRID_ROWS;
 
     for (int i = 0; i != COUNT; ++i) {
-        int const col = i % columns;
-        int const row = i / columns;
         juce::Rectangle<int> const cell =
-            juce::Rectangle<int>(col * w, row * h, w, h).reduced(2);
+            juce::Rectangle<int>(CELL_COL[i] * w, CELL_ROW[i] * h, w, h).reduced(2);
         bool const is_selected = (i == selected);
 
         g.setColour(is_selected ? Theme::PANEL_2 : Theme::INSET);
@@ -124,15 +129,16 @@ void FilterTypeSelector::paint(juce::Graphics& g)
 
 void FilterTypeSelector::mouseDown(juce::MouseEvent const& event)
 {
-    int const rows = (COUNT + columns - 1) / columns;
-    int const col = event.x / juce::jmax(1, getWidth() / columns);
-    int const row = event.y / juce::jmax(1, getHeight() / rows);
-    int const index = row * columns + col;
+    int const col = event.x / juce::jmax(1, getWidth() / GRID_COLS);
+    int const row = event.y / juce::jmax(1, getHeight() / GRID_ROWS);
 
-    if (col >= 0 && col < columns && index >= 0 && index < COUNT) {
-        selected = index;
-        bridge.set_discrete(param_id, index);
-        repaint();
+    for (int i = 0; i != COUNT; ++i) {
+        if (CELL_COL[i] == col && CELL_ROW[i] == row) {
+            selected = i;
+            bridge.set_discrete(param_id, i);
+            repaint();
+            return;
+        }
     }
 }
 

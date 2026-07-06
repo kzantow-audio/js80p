@@ -41,7 +41,7 @@ FilterPanel::FilterPanel(
     Spec const specs[2] = { a, b };
 
     for (int f = 0; f != 2; ++f) {
-        FilterTypeSelector* const type = new FilterTypeSelector(bridge, specs[f].type, 2);
+        FilterTypeSelector* const type = new FilterTypeSelector(bridge, specs[f].type);
         types.add(type);
         addChildComponent(type);
 
@@ -102,23 +102,26 @@ void FilterPanel::resized()
 
     b.removeFromTop(2);
 
-    /* Compact section: a 2-column type-selector block on the left, then the
-     * CUTOFF / Q / GAIN knobs. CUTOFF (FREQ) is the important one, so it is the
-     * biggest (~1.25x the others) and offsets upward into the space above the
-     * bottom-aligned Q / GAIN. */
+    /* Compact section: a 3-column type-selector block on the left, then the
+     * CUTOFF / Q / GAIN knobs. Q / GAIN match the oscillator section's knob
+     * cell; CUTOFF (FREQ) is the important one, so it is a little larger and
+     * offsets upward into the space above the bottom-aligned Q / GAIN. The
+     * type selector is shorter than the knobs and top-aligned with them, so the
+     * whole section stays compact. */
     juce::Rectangle<int> const row = b;
-    int const freq_h = 90;
-    int const small_h = 66;
+    int const freq_h = 76;
+    int const small_h = 70;
     int const bottom = row.getBottom();
 
-    juce::Rectangle<int> const type_area = row.withWidth(46);
-    int const knobs_x = type_area.getRight() + 4;
+    int const type_w = 66;
+    int const type_h = 58;
+    int const knobs_x = row.getX() + type_w + 4;
     int const avail = row.getRight() - knobs_x;
     int const small_w = avail * 3 / 10;
     int const freq_w = avail - 2 * small_w;
 
     for (int f = 0; f != 2; ++f) {
-        types[f]->setBounds(type_area);
+        types[f]->setBounds(row.getX(), bottom - freq_h, type_w, type_h);
         knobs[f * 3 + 0]->setBounds(knobs_x, bottom - freq_h, freq_w, freq_h);
         knobs[f * 3 + 1]->setBounds(knobs_x + freq_w, bottom - small_h, small_w, small_h);
         knobs[f * 3 + 2]->setBounds(knobs_x + freq_w + small_w, bottom - small_h, small_w, small_h);

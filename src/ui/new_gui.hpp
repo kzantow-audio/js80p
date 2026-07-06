@@ -104,6 +104,10 @@ class NewGui : public juce::Component, private juce::Timer
 
         ParamBridge bridge;
         juce::TextButton init_button;
+        /* Global effect output volume (EV3V), a header knob to the right of the
+         * tabs with its OUT caption drawn to the left (no value readout). */
+        std::unique_ptr<Knob> out_knob;
+        juce::Rectangle<int> out_label_bounds;
         ModulationManager manager;
         MacroStrip macro_strip;
         EffectsPage effects_page;

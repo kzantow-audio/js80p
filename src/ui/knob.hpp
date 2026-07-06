@@ -66,12 +66,27 @@ class Knob : public juce::Component
         void set_mirrors(std::vector<Synth::ParamId> params);
 
         void set_center_value(double const display_value);
+
+        /** Restrict the knob's travel to an exponential frequency sweep between
+         *  \c lo and \c hi Hz, with \c center Hz at mid-travel. Overrides the
+         *  parameter's native range/skew for this control. */
+        void set_freq_range(double const lo, double const hi, double const center);
+
         void set_semitone_snap(bool const on);
         void set_min_ratio(double const r);
 
         /** Show these option names instead of the raw index for a discrete
          *  parameter (e.g. filter / distortion type). */
         void set_discrete_labels(juce::StringArray labels);
+
+        /** Use smaller label/value text so the knob reads cleanly in a narrower
+         *  medium-tier cell. */
+        void set_compact(bool const on);
+
+        /** Draw only the dial: no caption above and no value readout below, so
+         *  the circle fills the whole height. Used where the caption sits beside
+         *  the knob instead (e.g. the header OUT knob). */
+        void set_bare(bool const on);
 
         void refresh();
 
@@ -135,14 +150,21 @@ class Knob : public juce::Component
         std::vector<Synth::ParamId> mirrors;
         juce::StringArray discrete_labels;
 
+        bool has_freq_range() const { return freq_lo > 0.0 && freq_hi > freq_lo; }
+
         double ratio;
         double skew;
+        double freq_lo;    /* exponential frequency sweep bounds (Hz); <=0 = off */
+        double freq_hi;
+        double freq_skew;  /* v-space exponent placing the center at mid-travel */
         double min_ratio;
         double drag_start_visual;
         bool dragging;
         bool dragging_depth;
         double drag_start_depth;
         bool semitone_snap;
+        bool compact;
+        bool bare;
 
         bool assigned;
         Modulation::Type mod_type;

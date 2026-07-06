@@ -26,12 +26,16 @@
 namespace JS80P
 {
 
-/* Knob cell size (matches the synth page's 72px cell height). */
-static constexpr int KNOB_W = 56;
-static constexpr int KNOB_H = 72;
+/* Two control sizes. Large matches the synth page's 72px cell. Medium is the
+ * same knob at ~4/5 the circle size, vertically centred so its circle lines up
+ * with the large row. */
+static constexpr int LARGE_W = 56;
+static constexpr int KNOB_H  = 72;
+static constexpr int MED_W   = 48;
+static constexpr int MED_H   = 65;
 static constexpr int TITLE_H = 22;
 static constexpr int PANEL_PAD = 8;
-static constexpr int PANEL_GAP = 8;
+static constexpr int PANEL_GAP = 6;
 
 
 EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
@@ -43,115 +47,225 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(viewport);
 
-    /* The effect chain, grouped the way the original GUI groups it. "TYPE" /
-     * mode / reversed params (originally discrete selectors or toggles) are
-     * shown here as knobs that step through their options. The logarithmic-
-     * scale toggles from the old GUI are intentionally omitted. */
+    /* The effect chain, grouped the way the original GUI groups it. Each panel
+     * is one left-to-right row of controls in two sizes: large primary knobs
+     * and ~4/5-size medium knobs for the related secondary controls, mixed in
+     * whatever order reads best. "TYPE" / mode params stay as knobs (they show
+     * the option name); the old logarithmic-scale toggles are omitted. */
     using P = Synth::ParamId;
 
-    /* Top line: input, the three gain stages, the two distortions, the two
-     * filters and the output volume (VOL 3, renamed OUT). */
-    add_panel("INPUT", 1, { { P::INVOL, "VOL" } });
-    add_panel("VOL 1", 1, { { P::EV1V, "VOL" } });
+    /* Row 0 - top compact strip: input, the gain stages, the two distortions
+     * and the two filters. (The global output volume now lives in the header.) */
+    add_large(begin_panel("INPUT", 0), { { P::INVOL, "VOL" } });
+    add_large(begin_panel("VOL 1", 0), { { P::EV1V, "VOL" } });
 
-    add_panel("DIST 1", 2, {
-        { P::ED1L, "LEVEL" }, { P::ED1TYP, "TYPE" }
+    int const dist1 = begin_panel("DIST 1", 0);
+    add_large(dist1, { { P::ED1L, "LEVEL" } });
+    add_medium(dist1, { { P::ED1TYP, "TYPE" } });
+
+    int const dist2 = begin_panel("DIST 2", 0);
+    add_large(dist2, { { P::ED2L, "LEVEL" } });
+    add_medium(dist2, { { P::ED2TYP, "TYPE" } });
+
+    int const filter1 = begin_panel("FILTER 1", 0);
+    add_large(filter1, { { P::EF1FRQ, "FREQ" } });
+    add_medium(filter1, { { P::EF1TYP, "TYPE" }, { P::EF1Q, "Q" }, { P::EF1G, "GAIN" } });
+
+    int const filter2 = begin_panel("FILTER 2", 0);
+    add_large(filter2, { { P::EF2FRQ, "FREQ" } });
+    add_medium(filter2, { { P::EF2TYP, "TYPE" }, { P::EF2Q, "Q" }, { P::EF2G, "GAIN" } });
+
+    add_large(begin_panel("VOL 2", 0), { { P::EV2V, "VOL" } });
+
+    /* Row 1 - CHORUS (left) and TAPE (right) share a single row. WIDTH is a
+     * large knob kept in its natural place, right after the TYPE selector. */
+    int const chorus = begin_panel("CHORUS", 1);
+    add_mix(chorus, P::ECWET, P::ECDRY);
+    add_large(chorus, { { P::ECFRQ, "FREQ" }, { P::ECDPT, "DEPTH" } });
+    add_medium(chorus, { { P::ECDEL, "DELAY" }, { P::ECFB, "FB" }, { P::ECTYP, "TYPE" } });
+    add_large(chorus, { { P::ECWID, "WIDTH" } });
+    add_medium(chorus, {
+        { P::ECDF, "DAMP F" }, { P::ECDG, "DAMP G" },
+        { P::ECHPF, "HPF" }, { P::ECHPQ, "HP Q" }
     });
+    /* Tempo-sync toggle for the LFO rate, centred over the FREQ knob. */
+    add_button(chorus, P::ECSYN, "BPM", P::ECFRQ);
 
-    add_panel("DIST 2", 2, {
-        { P::ED2L, "LEVEL" }, { P::ED2TYP, "TYPE" }
+    /* TAPE: STOP is a large primary knob and sits last in the row. */
+    int const tape = begin_panel("TAPE", 1);
+    add_large(tape, { { P::ETWFA, "WOW" }, { P::ETSAT, "SAT" } });
+    add_medium(tape, {
+        { P::ETWFS, "SPEED" }, { P::ETCLR, "COLOR" },
+        { P::ETSTR, "STEREO" }, { P::ETSTYP, "TYPE" }, { P::ETHSS, "HISS" }
     });
+    add_large(tape, { { P::ETSTP, "STOP" } });
+    add_button(tape, P::ETEND, "PRE FX")
+        ->set_option_labels({ "PRE FX", "POST FX" });
 
-    add_panel("FILTER 1", 4, {
-        { P::EF1TYP, "TYPE" }, { P::EF1FRQ, "FREQ" },
-        { P::EF1Q, "Q" }, { P::EF1G, "GAIN" }
+    /* Row 2 - ECHO. REV 1 / REV 2 / SC MODE move to title buttons. WIDTH is a
+     * large knob kept right after DIST. */
+    int const echo = begin_panel("ECHO", 2);
+    add_mix(echo, P::EEWET, P::EEDRY);
+    add_large(echo, { { P::EEDEL, "DELAY" }, { P::EEFB, "FB" } });
+    add_medium(echo, { { P::EEINV, "IN" }, { P::EEDST, "DIST" } });
+    add_large(echo, { { P::EEWID, "WIDTH" } });
+    add_medium(echo, {
+        { P::EEDF, "DAMP F" }, { P::EEDG, "DAMP G" },
+        { P::EEHPF, "HPF" }, { P::EEHPQ, "HP Q" },
+        { P::EECTH, "SC TH" }, { P::EECAT, "SC AT" },
+        { P::EECRL, "SC RL" }, { P::EECR, "SC R" }
     });
+    /* Tempo-sync toggle for the DELAY time, centred over the DELAY knob. */
+    add_button(echo, P::EESYN, "BPM", P::EEDEL);
+    /* REV 1 sits over the FB knob, with REV 2 laid out just to its right. */
+    add_button(echo, P::EER1, "REV 1", P::EEFB);
+    add_button_trailing(echo, P::EER2, "REV 2");
+    /* Side-chain mode toggle, centred over the side-chain group's lead knob. */
+    add_button(echo, P::EECM, "SC", P::EECTH)->set_option_labels({ "COMP", "EXPD" });
 
-    add_panel("FILTER 2", 4, {
-        { P::EF2TYP, "TYPE" }, { P::EF2FRQ, "FREQ" },
-        { P::EF2Q, "Q" }, { P::EF2G, "GAIN" }
+    /* Row 3 - REVERB. WIDTH is a large knob kept right after DIST. */
+    int const reverb = begin_panel("REVERB", 3);
+    add_mix(reverb, P::ERWET, P::ERDRY);
+    add_large(reverb, { { P::ERRS, "SIZE" }, { P::ERRR, "REFL" } });
+    add_medium(reverb, { { P::ERTYP, "TYPE" }, { P::ERDST, "DIST" } });
+    add_large(reverb, { { P::ERWID, "WIDTH" } });
+    add_medium(reverb, {
+        { P::ERCM, "SC MODE" },
+        { P::ERDF, "DAMP F" }, { P::ERDG, "DAMP G" },
+        { P::ERHPF, "HPF" }, { P::ERHPQ, "HP Q" },
+        { P::ERCTH, "SC TH" }, { P::ERCAT, "SC AT" },
+        { P::ERCRL, "SC RL" }, { P::ERCR, "SC R" }
     });
-
-    add_panel("VOL 2", 1, { { P::EV2V, "VOL" } });
-    add_panel("OUT", 1, { { P::EV3V, "VOL" } });
-
-    /* Each of the big multi-knob effects gets its own full-width row so it fits
-     * on a single line. cols == knob count keeps them one row tall. */
-    add_panel("TAPE", 9, {
-        { P::ETSTP, "STOP" }, { P::ETWFA, "WOW" }, { P::ETWFS, "SPEED" },
-        { P::ETSAT, "SAT" }, { P::ETCLR, "COLOR" }, { P::ETHSS, "HISS" },
-        { P::ETSTR, "STEREO" }, { P::ETSTYP, "TYPE" }, { P::ETEND, "END" }
-    }, true);
-
-    add_panel("CHORUS", 12, {
-        { P::ECTYP, "TYPE" }, { P::ECDEL, "DELAY" }, { P::ECFRQ, "FREQ" },
-        { P::ECDPT, "DEPTH" }, { P::ECFB, "FB" }, { P::ECDF, "DAMP F" },
-        { P::ECDG, "DAMP G" }, { P::ECWID, "WIDTH" }, { P::ECHPF, "HPF" },
-        { P::ECHPQ, "HP Q" }, { P::ECWET, "WET" }, { P::ECDRY, "DRY" }
-    }, true);
-
-    add_panel("ECHO", 18, {
-        { P::EEINV, "IN" }, { P::EEDEL, "DELAY" }, { P::EEFB, "FB" },
-        { P::EEDST, "DIST" }, { P::EEDF, "DAMP F" }, { P::EEDG, "DAMP G" },
-        { P::EEWID, "WIDTH" }, { P::EEHPF, "HPF" }, { P::EEHPQ, "HP Q" },
-        { P::EECTH, "SC TH" }, { P::EECAT, "SC AT" }, { P::EECRL, "SC RL" },
-        { P::EECR, "SC R" }, { P::EECM, "SC MODE" }, { P::EER1, "REV 1" },
-        { P::EER2, "REV 2" }, { P::EEWET, "WET" }, { P::EEDRY, "DRY" }
-    }, true);
-
-    add_panel("REVERB", 16, {
-        { P::ERTYP, "TYPE" }, { P::ERRS, "SIZE" }, { P::ERRR, "REFL" },
-        { P::ERDST, "DIST" }, { P::ERDF, "DAMP F" }, { P::ERDG, "DAMP G" },
-        { P::ERWID, "WIDTH" }, { P::ERHPF, "HPF" }, { P::ERHPQ, "HP Q" },
-        { P::ERCTH, "SC TH" }, { P::ERCAT, "SC AT" }, { P::ERCRL, "SC RL" },
-        { P::ERCR, "SC R" }, { P::ERCM, "SC MODE" }, { P::ERWET, "WET" },
-        { P::ERDRY, "DRY" }
-    }, true);
 }
 
 
-void EffectsPage::add_panel(
-        juce::String title,
-        int const cols,
-        std::initializer_list<KnobSpec> const specs,
-        bool const full_row
-) {
-    using P = Synth::ParamId;
-
+int EffectsPage::begin_panel(juce::String title, int const row)
+{
     Panel panel;
     panel.title = std::move(title);
-    panel.cols = cols;
-    panel.full_row = full_row;
+    panel.row = row;
+    panels.push_back(std::move(panel));
+    return (int)panels.size() - 1;
+}
 
-    for (KnobSpec const& spec : specs) {
-        Knob* const knob = new Knob(bridge, spec.id, spec.label);
 
-        /* Continuous effect knobs are macro-modulation destinations; the
-         * discrete "type" / "mode" selectors are not. */
-        if (!bridge.is_discrete(spec.id)) {
-            knob->set_manager(&manager);
-            knob->set_mod_caps(Modulation::CAP_MACRO);
-        }
+Knob* EffectsPage::make_knob(KnobSpec const& spec, bool const medium)
+{
+    using P = Synth::ParamId;
 
-        /* Filter cutoffs use the same exponential scaling as the oscillator
-         * filters: 1 kHz at mid-travel. */
-        if (spec.id == P::EF1FRQ || spec.id == P::EF2FRQ) {
-            knob->set_center_value(1000.0);
-        }
+    Knob* const knob = new Knob(bridge, spec.id, spec.label);
 
-        /* Show names instead of indices for the type selectors. */
-        if (spec.id == P::EF1TYP || spec.id == P::EF2TYP) {
-            knob->set_discrete_labels(filter_type_labels());
-        } else if (spec.id == P::ED1TYP || spec.id == P::ED2TYP) {
-            knob->set_discrete_labels(distortion_type_labels());
-        }
-
-        knobs.add(knob);
-        content.addAndMakeVisible(knob);
-        panel.knobs.push_back(knob);
+    /* Continuous effect knobs are macro-modulation destinations; the discrete
+     * "type" / "mode" selectors are not. */
+    if (!bridge.is_discrete(spec.id)) {
+        knob->set_manager(&manager);
+        knob->set_mod_caps(Modulation::CAP_MACRO);
     }
 
-    panels.push_back(std::move(panel));
+    /* Frequency cutoffs (filters, damping, HPF): an exponential 20 Hz .. 20 kHz
+     * sweep with 1.5 kHz at mid-travel, instead of the parameter's full native
+     * range. */
+    switch (spec.id) {
+        case P::EF1FRQ: case P::EF2FRQ:
+        case P::ECDF: case P::ECHPF:
+        case P::EEDF: case P::EEHPF:
+        case P::ERDF: case P::ERHPF:
+            knob->set_freq_range(20.0, 20000.0, 1500.0);
+            break;
+
+        /* Chorus LFO rate: exponential, 3 Hz at mid-travel. */
+        case P::ECFRQ:
+            knob->set_center_value(3.0);
+            break;
+
+        default:
+            break;
+    }
+
+    /* Show names instead of indices for the type / mode selectors. */
+    if (spec.id == P::EF1TYP || spec.id == P::EF2TYP) {
+        knob->set_discrete_labels(filter_type_labels());
+    } else if (spec.id == P::ED1TYP || spec.id == P::ED2TYP
+            || spec.id == P::ETSTYP) {
+        knob->set_discrete_labels(distortion_type_labels());
+    } else if (spec.id == P::ERCM) {
+        knob->set_discrete_labels({ "COMP", "EXPD" });
+    }
+
+    if (medium) {
+        knob->set_compact(true);
+    }
+
+    knobs.add(knob);
+    content.addAndMakeVisible(knob);
+    return knob;
+}
+
+
+void EffectsPage::add_large(
+        int const panel, std::initializer_list<KnobSpec> const specs
+) {
+    for (KnobSpec const& spec : specs) {
+        Cell cell;
+        cell.knob = make_knob(spec, false);
+        cell.id = spec.id;
+        panels[(size_t)panel].cells.push_back(cell);
+    }
+}
+
+
+void EffectsPage::add_medium(
+        int const panel, std::initializer_list<KnobSpec> const specs
+) {
+    for (KnobSpec const& spec : specs) {
+        Cell cell;
+        cell.knob = make_knob(spec, true);
+        cell.medium = true;
+        cell.id = spec.id;
+        panels[(size_t)panel].cells.push_back(cell);
+    }
+}
+
+
+void EffectsPage::add_mix(
+        int const panel, Synth::ParamId const wet, Synth::ParamId const dry
+) {
+    MixKnob* const mix = new MixKnob(bridge, wet, dry, "MIX");
+    mix_knobs.add(mix);
+    content.addAndMakeVisible(mix);
+
+    Cell cell;
+    cell.mix = mix;
+    panels[(size_t)panel].cells.push_back(cell);
+}
+
+
+MiniButton* EffectsPage::add_button(
+        int const panel, Synth::ParamId const id, juce::String label,
+        Synth::ParamId const anchor
+) {
+    MiniButton* const button = new MiniButton(bridge, id, std::move(label));
+    buttons.add(button);
+    content.addAndMakeVisible(button);
+
+    if (anchor != Synth::ParamId::PARAM_ID_COUNT) {
+        panels[(size_t)panel].anchored.push_back({ button, anchor, {} });
+    } else {
+        panels[(size_t)panel].buttons.push_back(button);
+    }
+
+    return button;
+}
+
+
+MiniButton* EffectsPage::add_button_trailing(
+        int const panel, Synth::ParamId const id, juce::String label
+) {
+    MiniButton* const button = new MiniButton(bridge, id, std::move(label));
+    buttons.add(button);
+    content.addAndMakeVisible(button);
+    panels[(size_t)panel].anchored.back().trailing.push_back(button);
+    return button;
 }
 
 
@@ -162,19 +276,79 @@ void EffectsPage::resized()
 }
 
 
-void EffectsPage::place_knobs(Panel& panel)
+juce::Point<int> EffectsPage::panel_size(Panel const& p) const
 {
-    int const n = (int)panel.knobs.size();
-    int const inner_x = panel.bounds.getX() + PANEL_PAD;
-    int const inner_y = panel.bounds.getY() + TITLE_H;
+    int inner = 0;
+    for (Cell const& c : p.cells) {
+        inner += c.medium ? MED_W : LARGE_W;
+    }
 
-    for (int i = 0; i != n; ++i) {
-        panel.knobs[(size_t)i]->setBounds(
-            inner_x + (i % panel.cols) * KNOB_W,
-            inner_y + (i / panel.cols) * KNOB_H,
-            KNOB_W,
-            KNOB_H
-        );
+    return juce::Point<int>(
+        inner + 2 * PANEL_PAD, TITLE_H + KNOB_H + PANEL_PAD
+    );
+}
+
+
+void EffectsPage::place_panel(Panel& panel)
+{
+    int const inner_y = panel.bounds.getY() + TITLE_H;
+    int const med_y = inner_y + (KNOB_H - MED_H) / 2;
+    int x = panel.bounds.getX() + PANEL_PAD;
+
+    /* One left-to-right row. Large cells (primary knobs, the MIX cell) are full
+     * height; medium cells are shorter and vertically centred so their circles
+     * line up with the large row. */
+    for (Cell const& cell : panel.cells) {
+        if (cell.medium) {
+            cell.knob->setBounds(x, med_y, MED_W, MED_H);
+            x += MED_W;
+        } else if (cell.mix != nullptr) {
+            cell.mix->setBounds(x, inner_y, LARGE_W, KNOB_H);
+            x += LARGE_W;
+        } else {
+            cell.knob->setBounds(x, inner_y, LARGE_W, KNOB_H);
+            x += LARGE_W;
+        }
+    }
+
+    /* Title-bar buttons, vertically centred on the title text. The title is
+     * drawn in a 16px band starting PANEL pad-6 below the panel top (see
+     * paint_content), so its centre sits at getY()+14. */
+    int const bh = 14;
+    int const by = panel.bounds.getY() + 14 - bh / 2;
+
+    /* Anchored title buttons: horizontally centred over the knob they affect
+     * (e.g. the CHORUS/ECHO BPM toggle over FREQ / DELAY). */
+    for (AnchoredButton const& ab : panel.anchored) {
+        int const bw = ab.button->preferred_width();
+        int cx = panel.bounds.getX() + PANEL_PAD + LARGE_W / 2;   /* fallback */
+
+        for (Cell const& cell : panel.cells) {
+            if (cell.knob != nullptr && cell.id == ab.anchor) {
+                cx = cell.knob->getBounds().getCentreX();
+                break;
+            }
+        }
+
+        ab.button->setBounds(cx - bw / 2, by, bw, bh);
+
+        /* Any trailing buttons flow to the right of the anchored one. */
+        int tx = cx - bw / 2 + bw + 4;
+        for (MiniButton* const t : ab.trailing) {
+            int const tw = t->preferred_width();
+            t->setBounds(tx, by, tw, bh);
+            tx += tw + 4;
+        }
+    }
+
+    /* Title-bar buttons, right-aligned and laid out left-to-right in order. */
+    int bx = panel.bounds.getRight() - PANEL_PAD;
+
+    for (int i = (int)panel.buttons.size() - 1; i >= 0; --i) {
+        int const bw = panel.buttons[(size_t)i]->preferred_width();
+        bx -= bw;
+        panel.buttons[(size_t)i]->setBounds(bx, by, bw, bh);
+        bx -= 4;
     }
 }
 
@@ -185,48 +359,33 @@ void EffectsPage::layout()
         1, viewport.getWidth() - viewport.getScrollBarThickness()
     );
 
-    auto panel_size = [](Panel const& p) {
-        int const n = (int)p.knobs.size();
-        int const rows = (n + p.cols - 1) / p.cols;
-        return juce::Point<int>(
-            p.cols * KNOB_W + 2 * PANEL_PAD, TITLE_H + rows * KNOB_H + PANEL_PAD
-        );
-    };
-
-    int x = 0;
-    int y = 0;
-    int top_h = 0;
-    int content_w = 0;
-
-    /* Top line: all the compact (non-full-row) panels side by side. */
-    for (Panel& panel : panels) {
-        if (panel.full_row) {
-            continue;
-        }
-
-        juce::Point<int> const sz = panel_size(panel);
-        panel.bounds = juce::Rectangle<int>(x, y, sz.x, sz.y);
-        place_knobs(panel);
-
-        x += sz.x + PANEL_GAP;
-        top_h = juce::jmax(top_h, sz.y);
+    int max_row = 0;
+    for (Panel const& panel : panels) {
+        max_row = juce::jmax(max_row, panel.row);
     }
 
-    content_w = juce::jmax(content_w, x - PANEL_GAP);
-    y += top_h + PANEL_GAP;
+    int y = 0;
+    int content_w = 0;
 
-    /* Each big effect on its own full-width row. */
-    for (Panel& panel : panels) {
-        if (!panel.full_row) {
-            continue;
+    for (int row = 0; row <= max_row; ++row) {
+        int x = 0;
+        int row_h = 0;
+
+        for (Panel& panel : panels) {
+            if (panel.row != row) {
+                continue;
+            }
+
+            juce::Point<int> const sz = panel_size(panel);
+            panel.bounds = juce::Rectangle<int>(x, y, sz.x, sz.y);
+            place_panel(panel);
+
+            x += sz.x + PANEL_GAP;
+            row_h = juce::jmax(row_h, sz.y);
         }
 
-        juce::Point<int> const sz = panel_size(panel);
-        panel.bounds = juce::Rectangle<int>(0, y, sz.x, sz.y);
-        place_knobs(panel);
-
-        content_w = juce::jmax(content_w, sz.x);
-        y += sz.y + PANEL_GAP;
+        content_w = juce::jmax(content_w, x - PANEL_GAP);
+        y += row_h + PANEL_GAP;
     }
 
     content.setSize(juce::jmax(avail, content_w), y + 2);
@@ -267,6 +426,14 @@ void EffectsPage::refresh()
 {
     for (Knob* const knob : knobs) {
         knob->refresh();
+    }
+
+    for (MixKnob* const mix : mix_knobs) {
+        mix->refresh();
+    }
+
+    for (MiniButton* const button : buttons) {
+        button->refresh();
     }
 }
 

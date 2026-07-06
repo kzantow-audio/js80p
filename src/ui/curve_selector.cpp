@@ -29,10 +29,14 @@ namespace JS80P
 {
 
 CurveSelector::CurveSelector(
-        ParamBridge& bridge, std::vector<Synth::ParamId> targets, bool const falling
+        ParamBridge& bridge,
+        std::vector<Synth::ParamId> targets,
+        bool const falling,
+        bool const distortion
 ) : bridge(bridge),
     targets(std::move(targets)),
     falling(falling),
+    distortion(distortion),
     index(0),
     drag_start(0)
 {
@@ -77,9 +81,11 @@ void CurveSelector::paint(juce::Graphics& g)
 
     for (int i = 0; i <= 14; ++i) {
         double const x = (double)i / 14.0;
-        double y = index >= linear
-            ? x
-            : (double)Math::apply_envelope_shape((Math::EnvelopeShape)index, (Number)x);
+        double y = distortion
+            ? (double)Math::distort(1.0, (Number)x, (Math::DistortionCurve)index)
+            : (index >= linear
+                ? x
+                : (double)Math::apply_envelope_shape((Math::EnvelopeShape)index, (Number)x));
         if (falling) {
             y = 1.0 - y;
         }
@@ -89,7 +95,7 @@ void CurveSelector::paint(juce::Graphics& g)
         else curve.lineTo(px, py);
     }
 
-    g.setColour(Theme::ENV);
+    g.setColour(distortion ? Theme::MACRO : Theme::ENV);
     g.strokePath(curve, juce::PathStrokeType(1.4f));
 }
 

@@ -549,6 +549,72 @@ void ModulationManager::collect_garbage(Synth::ParamId const just_cleared)
 }
 
 
+bool ModulationManager::is_mirrored(Synth::ParamId const dest) const
+{
+    Modulation::Type type;
+    int index;
+
+    if (!Modulation::decode(bridge.controller(dest), type, index)) {
+        return false;
+    }
+
+    std::map<int, int>::const_iterator const it = slot_group.find(slot_key(type, index));
+
+    if (it == slot_group.end()) {
+        return false;
+    }
+
+    int const gid = it->second;
+    int count = 0;
+
+    for (std::map<int, int>::const_iterator og = slot_group.begin(); og != slot_group.end(); ++og) {
+        if (og->second == gid) {
+            ++count;
+        }
+    }
+
+    return count > 1;
+}
+
+
+void ModulationManager::split(Synth::ParamId const dest)
+{
+    Modulation::Type type;
+    int index;
+
+    if (!Modulation::decode(bridge.controller(dest), type, index)) {
+        return;
+    }
+
+    /* A fresh group id detaches this slot from its mirror group; membership is
+     * stable across rescans, so the identical shape no longer re-merges it. */
+    slot_group[slot_key(type, index)] = next_group_id++;
+    rescan();
+}
+
+
+void ModulationManager::merge(
+        Synth::ParamId const dest, Modulation::Type const type, int const from_rep
+) {
+    Modulation::Type dtype;
+    int index;
+
+    if (!Modulation::decode(bridge.controller(dest), dtype, index) || dtype != type) {
+        return;
+    }
+
+    /* Copy the shared shape onto this slot (per-destination levels are left
+     * alone) and join the source group so the two mirror from now on. */
+    copy_shape(type, from_rep, index);
+
+    std::map<int, int>::const_iterator const it = slot_group.find(slot_key(type, from_rep));
+    slot_group[slot_key(type, index)] =
+        it != slot_group.end() ? it->second : next_group_id++;
+
+    rescan();
+}
+
+
 void ModulationManager::unassign(Synth::ParamId const dest)
 {
     Modulation::Type type;

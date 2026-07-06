@@ -94,8 +94,8 @@ void DotControl::paint(juce::Graphics& g)
         g.fillPath(pie);
     }
 
-    /* Outline: the whole control at value 0, a subtle rim otherwise. */
-    g.setColour(v > 1.0e-3 ? Theme::EDGE : Theme::TEXT_DIM);
+    /* Orange outline at all times - it stays visible as the pie fills in. */
+    g.setColour(Theme::ACCENT);
     g.drawEllipse(circle, 1.0f);
 }
 

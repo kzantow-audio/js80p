@@ -83,6 +83,15 @@ NewGui::NewGui(Synth& synth)
     init_button.onClick = [this]() { init_patch(); };
     addAndMakeVisible(init_button);
 
+    /* Global effect output volume, promoted to a header knob (right of the
+     * tabs). Bare dial with the OUT caption drawn to its left; a macro-
+     * modulation destination like the other effect volumes. */
+    out_knob = std::make_unique<Knob>(bridge, Synth::ParamId::EV3V, "OUT");
+    out_knob->set_manager(&manager);
+    out_knob->set_mod_caps(Modulation::CAP_MACRO);
+    out_knob->set_bare(true);
+    addAndMakeVisible(*out_knob);
+
     /* The EFFECTS page shares the body area; hidden until its tab is active. */
     addChildComponent(effects_page);
 
@@ -450,6 +459,20 @@ void NewGui::resized()
     header_bounds = area.removeFromTop(46);
     init_button.setBounds(header_bounds.getX() + 96, header_bounds.getCentreY() - 11, 52, 22);
 
+    /* Global OUT knob in the header, in the gap between the tabs and the
+     * editor's "Detailed view" toggle (which the plugin editor pins to the top
+     * right, ~108px wide). ~4/5 the size of a large knob's dial. Caption to the
+     * left, no value readout. */
+    {
+        int const out_sz = 38;
+        int const reserved_right = 116;   /* clear the Detailed-view toggle */
+        int const kx = header_bounds.getRight() - reserved_right - out_sz;
+        int const ky = header_bounds.getCentreY() - out_sz / 2;
+        out_knob->setBounds(kx, ky, out_sz, out_sz);
+        out_label_bounds =
+            juce::Rectangle<int>(kx - 4 - 34, header_bounds.getY(), 34, header_bounds.getHeight());
+    }
+
     /* SYNTH / EFFECTS tabs, centred in the header row. */
     {
         int const tab_w = 92;
@@ -471,7 +494,7 @@ void NewGui::resized()
     effects_page.setBounds(body_bounds);
 
     int const gap = 5;
-    int const filter_height = 130;
+    int const filter_height = 116;
 
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
@@ -644,14 +667,18 @@ void NewGui::paint_tabs(juce::Graphics& g)
 
     g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
 
+    /* Active tab: a 2px orange underline sitting on the top bar's baseline.
+     * Inactive tabs: dim text, no underline, no background. */
+    int const baseline = header_bounds.getBottom();
+
     for (auto const& tab : tabs) {
-        juce::Rectangle<float> const rf = tab.r.toFloat();
-        g.setColour(tab.on ? Theme::ACCENT : Theme::INSET);
-        g.fillRoundedRectangle(rf, 3.0f);
-        g.setColour(tab.on ? Theme::ACCENT : Theme::EDGE);
-        g.drawRoundedRectangle(rf.reduced(0.5f), 3.0f, 1.0f);
-        g.setColour(tab.on ? Theme::BG : Theme::TEXT_DIM);
+        g.setColour(tab.on ? Theme::TEXT : Theme::TEXT_DIM);
         g.drawText(tab.label, tab.r, juce::Justification::centred, false);
+
+        if (tab.on) {
+            g.setColour(Theme::ACCENT);
+            g.fillRect(tab.r.getX(), baseline - 2, tab.r.getWidth(), 2);
+        }
     }
 }
 
@@ -669,14 +696,10 @@ void NewGui::paint(juce::Graphics& g)
     g.setFont(juce::Font(juce::FontOptions().withHeight(20.0f).withStyle("Bold")));
     g.drawText("JS80P", header_bounds.reduced(16, 0), juce::Justification::centredLeft, false);
 
-    g.setColour(Theme::TEXT_FAINT);
-    g.setFont(12.0f);
-    g.drawText(
-        "new GUI - work in progress",
-        header_bounds.withTrimmedRight(120).reduced(16, 0),
-        juce::Justification::centredRight,
-        false
-    );
+    /* OUT caption to the left of the header output knob. */
+    g.setColour(Theme::TEXT_DIM);
+    g.setFont(juce::Font(juce::FontOptions().withHeight(11.0f).withStyle("Bold")));
+    g.drawText("OUT", out_label_bounds, juce::Justification::centredRight, false);
 
     paint_tabs(g);
 

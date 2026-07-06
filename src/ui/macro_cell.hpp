@@ -19,11 +19,14 @@
 #ifndef JS80P__UI__MACRO_CELL_HPP
 #define JS80P__UI__MACRO_CELL_HPP
 
+#include <memory>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
 #include "synth.hpp"
 
+#include "ui/curve_selector.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -32,9 +35,12 @@ namespace JS80P
 
 /**
  * \brief One performance-macro cell (macros 1-8). The rotary sets the macro's
- *        minimum output; a source badge at the top-right sets the maximum on
- *        drag (the CC modulation range) and, on click, opens a source menu
- *        (MIDI Learn, well-known CCs, mod/pitch wheel, velocity, note, ...).
+ *        minimum output; dragging the outer ring (or the source badge) sets the
+ *        maximum - the modulation amount. A source badge at the top-right opens
+ *        a source menu on click (MIDI Learn, well-known CCs, wheels, ...). The
+ *        M<n> caption sits to the left of the dial and briefly shows the value
+ *        while hovering or dragging; a distortion-curve selector sits at the
+ *        dial's bottom, mirroring the envelope card's curve controls.
  */
 class MacroCell : public juce::Component
 {
@@ -44,13 +50,19 @@ class MacroCell : public juce::Component
         void refresh();
 
         void paint(juce::Graphics& g) override;
+        void resized() override;
         void mouseDown(juce::MouseEvent const& event) override;
         void mouseDrag(juce::MouseEvent const& event) override;
         void mouseUp(juce::MouseEvent const& event) override;
         void mouseDoubleClick(juce::MouseEvent const& event) override;
+        void mouseEnter(juce::MouseEvent const& event) override;
+        void mouseExit(juce::MouseEvent const& event) override;
 
     private:
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
+        static constexpr float RING_BAND = 10.0f;   /* clickable band outside the dial */
+        static constexpr int LABEL_W = 34;          /* left caption gutter */
+        static constexpr int CURVE_SZ = 16;         /* distortion-curve square */
 
         juce::Rectangle<float> knob_circle() const;
         juce::Rectangle<float> badge_rect() const;
@@ -66,9 +78,13 @@ class MacroCell : public juce::Component
         Synth::ParamId const max_p;
         Synth::ParamId const in_p;
 
+        std::unique_ptr<CurveSelector> curve;
+
         double base;    /* min */
         double depth;   /* max - min (signed) */
 
+        bool hover;
+        bool dragging_base;
         bool dragging_depth;
         bool badge_press;
         int press_distance;

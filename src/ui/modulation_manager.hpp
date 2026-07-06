@@ -106,6 +106,30 @@ class ModulationManager
 
         void unassign(Synth::ParamId const dest);
 
+        /**
+         * \brief True if the modulator driving \c dest shares its shape group
+         *        with at least one other slot (i.e. it is a mirrored copy).
+         */
+        bool is_mirrored(Synth::ParamId const dest) const;
+
+        /**
+         * \brief Detach \c dest's modulator slot into its own fresh group so it
+         *        stops mirroring the others and shows as a separate editor. The
+         *        slot (and its values) are kept; only the grouping changes.
+         */
+        void split(Synth::ParamId const dest);
+
+        /**
+         * \brief Copy \c from_rep's shared shape onto \c dest's own slot and move
+         *        that slot into \c from_rep's group, so the two mirror. \c dest
+         *        keeps its own per-destination base range. No slot is allocated.
+         */
+        void merge(
+            Synth::ParamId const dest,
+            Modulation::Type const type,
+            int const from_rep
+        );
+
         /** Clear all grouping state (used when building a patch from scratch). */
         void reset();
 

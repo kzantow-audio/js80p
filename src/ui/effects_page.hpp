@@ -28,6 +28,8 @@
 #include "synth.hpp"
 
 #include "ui/knob.hpp"
+#include "ui/mini_button.hpp"
+#include "ui/mix_knob.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 
@@ -38,7 +40,10 @@ namespace JS80P
 /**
  * \brief The EFFECTS page of the new GUI: recreates the original GUI's effect
  *        chain (input/output volumes, two distortions, two filters, tape,
- *        chorus, echo, reverb) as draw_panel-style boxes of Knobs. Discrete
+ *        chorus, echo, reverb) as boxes of controls in three visual tiers:
+ *        large Knobs for the primary controls, ~2/3-size medium Knobs for the
+ *        related secondary controls next to them, and tiny DotControl pie-dots
+ *        (clustered, right of each panel) for infrequently used trims. Discrete
  *        "type"/mode params are shown as knobs that step through the options;
  *        the old logarithmic-scale toggles are intentionally omitted. Scrolls
  *        vertically via an internal Viewport when the body is short.
@@ -60,12 +65,34 @@ class EffectsPage : public juce::Component
             char const* label;
         };
 
+        /* One control in a panel's left-to-right row. Either a knob (large or
+         * medium) or a combined WET/DRY MIX cell (always large). Keeping the row
+         * as one ordered list lets a large knob sit anywhere among the mediums
+         * (e.g. TAPE's trailing STOP, or WIDTH after TYPE/DIST). */
+        struct Cell
+        {
+            Knob* knob = nullptr;    /* large or medium knob */
+            MixKnob* mix = nullptr;  /* combined WET/DRY cell (large) */
+            bool medium = false;     /* ~4/5-size related control */
+            Synth::ParamId id = Synth::ParamId::PARAM_ID_COUNT;   /* knob's param */
+        };
+
+        /* A title-bar button pinned above (centred over) the knob it affects,
+         * optionally followed by more buttons laid out to its right. */
+        struct AnchoredButton
+        {
+            MiniButton* button;
+            Synth::ParamId anchor;              /* the cell knob to centre over */
+            std::vector<MiniButton*> trailing;  /* placed to the right, in order */
+        };
+
         struct Panel
         {
             juce::String title;
-            int cols;
-            bool full_row;   /* laid out on its own full-width row */
-            std::vector<Knob*> knobs;
+            int row;          /* 0 = top compact strip; >=1 = full-width rows */
+            std::vector<Cell> cells;                 /* controls, left to right */
+            std::vector<MiniButton*> buttons;        /* title bar, right-aligned */
+            std::vector<AnchoredButton> anchored;    /* title bar, over a knob */
             juce::Rectangle<int> bounds;
         };
 
@@ -80,13 +107,24 @@ class EffectsPage : public juce::Component
                 EffectsPage& owner;
         };
 
-        void add_panel(
-            juce::String title,
-            int const cols,
-            std::initializer_list<KnobSpec> const specs,
-            bool const full_row = false
+        int begin_panel(juce::String title, int const row);
+        Knob* make_knob(KnobSpec const& spec, bool const medium);
+        void add_large(int const panel, std::initializer_list<KnobSpec> const specs);
+        void add_medium(int const panel, std::initializer_list<KnobSpec> const specs);
+        void add_mix(int const panel, Synth::ParamId const wet, Synth::ParamId const dry);
+        MiniButton* add_button(
+            int const panel,
+            Synth::ParamId const id,
+            juce::String label,
+            Synth::ParamId const anchor = Synth::ParamId::PARAM_ID_COUNT
         );
-        void place_knobs(Panel& panel);
+        /** Add a button laid out to the right of the panel's last anchored
+         *  button (which must already exist). */
+        MiniButton* add_button_trailing(
+            int const panel, Synth::ParamId const id, juce::String label
+        );
+        juce::Point<int> panel_size(Panel const& panel) const;
+        void place_panel(Panel& panel);
         void layout();
         void paint_content(juce::Graphics& g);
 
@@ -95,6 +133,8 @@ class EffectsPage : public juce::Component
         Content content;
         juce::Viewport viewport;
         juce::OwnedArray<Knob> knobs;
+        juce::OwnedArray<MixKnob> mix_knobs;
+        juce::OwnedArray<MiniButton> buttons;
         std::vector<Panel> panels;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EffectsPage)

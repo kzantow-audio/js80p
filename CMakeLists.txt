@@ -53,6 +53,8 @@ target_sources(JS80P PRIVATE
   src/gui/juce.cpp
   src/ui/modulation_manager.cpp
   src/ui/knob.cpp
+  src/ui/mini_button.cpp
+  src/ui/mix_knob.cpp
   src/ui/dot_control.cpp
   src/ui/waveform_selector.cpp
   src/ui/filter_type_selector.cpp

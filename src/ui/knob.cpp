@@ -136,12 +136,17 @@ Knob::Knob(
     mod_caps(Modulation::CAP_ALL),
     ratio(bridge.get_ratio(param_id)),
     skew(1.0),
+    freq_lo(0.0),
+    freq_hi(0.0),
+    freq_skew(1.0),
     min_ratio(0.0),
     drag_start_visual(0.0),
     dragging(false),
     dragging_depth(false),
     drag_start_depth(0.0),
     semitone_snap(false),
+    compact(false),
+    bare(false),
     assigned(false),
     mod_type(Modulation::LFO),
     mod_slot(0),
@@ -159,6 +164,8 @@ void Knob::set_manager(ModulationManager* const m) { manager = m; }
 void Knob::set_mod_caps(int const c) { mod_caps = c; }
 void Knob::set_mirrors(std::vector<Synth::ParamId> m) { mirrors = std::move(m); }
 void Knob::set_discrete_labels(juce::StringArray labels) { discrete_labels = std::move(labels); }
+void Knob::set_compact(bool const on) { compact = on; }
+void Knob::set_bare(bool const on) { bare = on; }
 
 
 void Knob::assign_mirrors(Modulation::Type const type, int const slot)
@@ -187,12 +194,24 @@ void Knob::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0, r)
 
 double Knob::ratio_to_visual(double const r) const
 {
+    if (has_freq_range()) {
+        double const d = juce::jlimit(freq_lo, freq_hi, bridge.display_value(param_id, r));
+        double const frac = std::log(d / freq_lo) / std::log(freq_hi / freq_lo);
+        return std::pow(juce::jlimit(0.0, 1.0, frac), 1.0 / freq_skew);
+    }
+
     return (skew == 1.0 || r <= 0.0) ? r : std::pow(r, 1.0 / skew);
 }
 
 
 double Knob::visual_to_ratio(double const v) const
 {
+    if (has_freq_range()) {
+        double const vv = juce::jlimit(0.0, 1.0, v);
+        double const d = freq_lo * std::pow(freq_hi / freq_lo, std::pow(vv, freq_skew));
+        return ratio_for_display(d);
+    }
+
     return (skew == 1.0 || v <= 0.0) ? v : std::pow(v, skew);
 }
 
@@ -260,6 +279,23 @@ void Knob::set_center_value(double const display_value)
     if (center_ratio > 1.0e-4 && center_ratio < 1.0 - 1.0e-4) {
         skew = juce::jlimit(0.1, 10.0, std::log(center_ratio) / std::log(0.5));
     }
+}
+
+
+void Knob::set_freq_range(double const lo, double const hi, double const center)
+{
+    if (lo <= 0.0 || hi <= lo) {
+        return;
+    }
+
+    freq_lo = lo;
+    freq_hi = hi;
+
+    /* The sweep is display = lo * (hi/lo)^(v^s); pick s so v = 0.5 lands on the
+     * requested center frequency. */
+    double const frac = std::log(center / lo) / std::log(hi / lo);
+    freq_skew = juce::jlimit(0.1, 10.0,
+        std::log(juce::jlimit(1.0e-4, 1.0 - 1.0e-4, frac)) / std::log(0.5));
 }
 
 
@@ -450,8 +486,11 @@ juce::String Knob::format_ratio(double const r) const
 juce::Rectangle<float> Knob::knob_circle() const
 {
     juce::Rectangle<int> b = getLocalBounds().reduced(2);
-    b.removeFromTop(14);
-    b.removeFromBottom(14);
+
+    if (!bare) {
+        b.removeFromTop(14);
+        b.removeFromBottom(14);
+    }
 
     float const size = (float)juce::jmin(b.getWidth(), b.getHeight());
     return b.toFloat().withSizeKeepingCentre(size, size).reduced(3.0f);
@@ -484,9 +523,13 @@ void Knob::paint(juce::Graphics& g)
     juce::Rectangle<int> const label_area = b.removeFromTop(14);
     juce::Rectangle<int> const value_area = b.removeFromBottom(14);
 
-    g.setColour(Theme::TEXT_DIM);
-    g.setFont(11.0f);
-    g.drawText(label, label_area, juce::Justification::centred, false);
+    float const text_font = compact ? 9.0f : 11.0f;
+
+    if (!bare) {
+        g.setColour(Theme::TEXT_DIM);
+        g.setFont(text_font);
+        g.drawText(label, label_area, juce::Justification::centred, false);
+    }
 
     juce::Rectangle<float> const kb = knob_circle();
     float const cx = kb.getCentreX();
@@ -520,9 +563,11 @@ void Knob::paint(juce::Graphics& g)
                cx + std::sin(pos_angle) * body, cy - std::cos(pos_angle) * body, 2.0f);
 
     if (!assigned) {
-        g.setColour(Theme::TEXT);
-        g.setFont(11.0f);
-        g.drawText(format_value(), value_area, juce::Justification::centred, false);
+        if (!bare) {
+            g.setColour(Theme::TEXT);
+            g.setFont(text_font);
+            g.drawText(format_value(), value_area, juce::Justification::centred, false);
+        }
         return;
     }
 
@@ -546,12 +591,14 @@ void Knob::paint(juce::Graphics& g)
     /* The badge itself is drawn by the free-floating ModBadge (see update_badge). */
 
     /* Below the knob: the line (base) value, or the amount while dragging it. */
-    double const shown = dragging_depth
-        ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth))
-        : base;
-    g.setColour(dragging_depth ? active : Theme::TEXT);
-    g.setFont(11.0f);
-    g.drawText(format_ratio(shown), value_area, juce::Justification::centred, false);
+    if (!bare) {
+        double const shown = dragging_depth
+            ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth))
+            : base;
+        g.setColour(dragging_depth ? active : Theme::TEXT);
+        g.setFont(text_font);
+        g.drawText(format_ratio(shown), value_area, juce::Justification::centred, false);
+    }
 }
 
 
@@ -635,14 +682,33 @@ void Knob::open_assign_menu()
                 return;
             }
 
-            if (result == 1) {
-                type = Modulation::ENVELOPE;
-                slot = self->manager->assign(self->param_id, Modulation::ENVELOPE, b, 0);
-            } else if (result == 2) {
-                type = Modulation::LFO;
-                slot = self->manager->assign(self->param_id, Modulation::LFO, b, 0);
+            if (result == 1 || result == 2) {
+                Modulation::Type const nt =
+                    result == 1 ? Modulation::ENVELOPE : Modulation::LFO;
+
+                /* "New" on a currently-mirrored source of the same kind splits it
+                 * off so it becomes separate, rather than allocating a fresh one. */
+                if (self->assigned && self->mod_type == nt
+                        && self->manager->is_mirrored(self->param_id)) {
+                    self->manager->split(self->param_id);
+                    self->update_assignment();
+                    return;
+                }
+
+                type = nt;
+                slot = self->manager->assign(self->param_id, nt, b, 0);
             } else if (result >= 100 && result < 200 && result - 100 < (int)clones->size()) {
                 std::pair<Modulation::Type, int> const& gp = (*clones)[result - 100];
+
+                /* Copy/mirror another source while already holding one of the same
+                 * kind: copy its values onto this slot and merge into its group,
+                 * instead of allocating a separate copy. */
+                if (self->assigned && self->mod_type == gp.first) {
+                    self->manager->merge(self->param_id, gp.first, gp.second);
+                    self->update_assignment();
+                    return;
+                }
+
                 type = gp.first;
                 slot = self->manager->assign(self->param_id, gp.first, b, gp.second);
             } else if (result >= 200 && result - 200 < KNOB_SOURCE_COUNT) {

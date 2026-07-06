@@ -31,21 +31,20 @@ namespace JS80P
 {
 
 /**
- * \brief The 7 biquad filter types as a single row of vector-drawn icon
- *        buttons (frequency-response glyphs), like the waveform selector.
- *        Bound to a discrete filter-type parameter.
- *        Order matches SimpleBiquadFilter: LP HP BP Notch Bell LS HS.
+ * \brief The 7 biquad filter types as vector-drawn icon buttons (frequency-
+ *        response glyphs), bound to a discrete filter-type parameter. Laid out
+ *        in a fixed 3-column grouping - column 0: LP HP BP; column 1: Notch,
+ *        Peak; column 2: low shelf, high shelf. Order matches
+ *        SimpleBiquadFilter: LP HP BP Notch Bell LS HS.
  */
 class FilterTypeSelector : public juce::Component
 {
     public:
         static constexpr int COUNT = 7;
 
-        /** \p columns lays the icons out in a grid (default: a single row). */
         FilterTypeSelector(
             ParamBridge& bridge,
-            Synth::ParamId const param_id,
-            int const columns = COUNT
+            Synth::ParamId const param_id
         );
 
         void refresh();
@@ -60,7 +59,6 @@ class FilterTypeSelector : public juce::Component
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
-        int const columns;
         int selected;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterTypeSelector)

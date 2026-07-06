@@ -16,14 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef JS80P__UI__CURVE_SELECTOR_HPP
-#define JS80P__UI__CURVE_SELECTOR_HPP
-
-#include <vector>
+#ifndef JS80P__UI__MIX_KNOB_HPP
+#define JS80P__UI__MIX_KNOB_HPP
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "js80p.hpp"
 #include "synth.hpp"
 
 #include "ui/param_bridge.hpp"
@@ -33,42 +30,47 @@ namespace JS80P
 {
 
 /**
- * \brief A tiny square that draws the current hardcoded shape and cycles through
- *        the options on vertical drag or mouse wheel. Writes to every mirrored
- *        target. In envelope mode it plots the envelope shapes; in distortion
- *        mode it plots the macro distortion curves (Math::distort).
+ * \brief A single rotary that folds an effect's WET and DRY volumes into one
+ *        "MIX" control. At mid-travel both are 100%; turning clockwise holds WET
+ *        at 100% while fading DRY to 0, and counter-clockwise holds DRY at 100%
+ *        while fading WET to 0. Styled to match the plain (unassigned) Knob.
  */
-class CurveSelector : public juce::Component
+class MixKnob : public juce::Component
 {
     public:
-        CurveSelector(
+        MixKnob(
             ParamBridge& bridge,
-            std::vector<Synth::ParamId> targets,
-            bool const falling,
-            bool const distortion = false
+            Synth::ParamId const wet_id,
+            Synth::ParamId const dry_id,
+            juce::String label
         );
 
         void refresh();
 
         void paint(juce::Graphics& g) override;
+        bool hitTest(int x, int y) override;
         void mouseDown(juce::MouseEvent const& event) override;
         void mouseDrag(juce::MouseEvent const& event) override;
-        void mouseWheelMove(
-            juce::MouseEvent const& event, juce::MouseWheelDetails const& wheel
-        ) override;
         void mouseDoubleClick(juce::MouseEvent const& event) override;
+        void mouseWheelMove(
+            juce::MouseEvent const& event,
+            juce::MouseWheelDetails const& wheel
+        ) override;
 
     private:
-        void set_index(int const index);
+        juce::Rectangle<float> knob_circle() const;
+        double read_mix() const;
+        void write_mix(double const m);
 
         ParamBridge& bridge;
-        std::vector<Synth::ParamId> targets;
-        bool const falling;
-        bool const distortion;
-        int index;
-        int drag_start;
+        Synth::ParamId const wet_id;
+        Synth::ParamId const dry_id;
+        juce::String const label;
+        double mix;   /* 0 = dry only, 0.5 = both full, 1 = wet only */
+        double drag_start;
+        bool dragging;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurveSelector)
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixKnob)
 };
 
 }
