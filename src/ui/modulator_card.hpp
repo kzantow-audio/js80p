@@ -19,6 +19,7 @@
 #ifndef JS80P__UI__MODULATOR_CARD_HPP
 #define JS80P__UI__MODULATOR_CARD_HPP
 
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -65,9 +66,28 @@ class ModulatorCard : public juce::Component
 
         void paint(juce::Graphics& g) override;
         void resized() override;
-        void mouseDown(juce::MouseEvent const& event) override;
 
     private:
+        /**
+         * \brief LFO tempo-sync (BPM) toggle: an orange-outlined button when
+         *        off, filled solid orange when on. A real child component, so
+         *        the whole drawn area is clickable and it shows a hover cue.
+         */
+        class SyncButton : public juce::Component
+        {
+            public:
+                std::function<bool()> is_active;   /* current on/off state */
+                std::function<void()> on_toggle;   /* invoked on click */
+
+                void paint(juce::Graphics& g) override;
+                void mouseUp(juce::MouseEvent const& event) override;
+                void mouseEnter(juce::MouseEvent const& event) override;
+                void mouseExit(juce::MouseEvent const& event) override;
+
+            private:
+                bool hover = false;
+        };
+
         void set_expanded(bool const expanded);
         void toggle_sync();
         void write_sustain();   /* SUS = INI + fraction*(PK-INI) per member */
@@ -90,7 +110,7 @@ class ModulatorCard : public juce::Component
         std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
         std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */
         bool lfo_expanded;
-        juce::Rectangle<int> sync_bounds;
+        std::unique_ptr<SyncButton> sync_button;   /* LFO tempo-sync (BPM) toggle */
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorCard)
 };

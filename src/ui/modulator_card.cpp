@@ -123,6 +123,14 @@ ModulatorCard::ModulatorCard(
         wave->set_on_click([this] { set_expanded(true); });
         addAndMakeVisible(*wave);
 
+        sync_button = std::make_unique<SyncButton>();
+        sync_button->setWantsKeyboardFocus(false);
+        sync_button->is_active = [this] {
+            return this->bridge.get_discrete(Modulation::lfo_syn(rep)) != 0;
+        };
+        sync_button->on_toggle = [this] { toggle_sync(); };
+        addAndMakeVisible(*sync_button);
+
         shape_grid = std::make_unique<WaveformSelector>(bridge, Modulation::lfo_wav(rep));
         shape_grid->set_on_select([this](int) { set_expanded(false); });
         addChildComponent(*shape_grid);
@@ -292,13 +300,14 @@ void ModulatorCard::resized()
             shape_grid->setBounds(b.removeFromTop(2 * bh));
             shape_grid->setVisible(true);
             wave->setVisible(false);
+            sync_button->setVisible(false);
             for (Knob* const k : knobs) k->setVisible(false);
-            sync_bounds = {};
             return;
         }
 
         shape_grid->setVisible(false);
         wave->setVisible(true);
+        sync_button->setVisible(true);
 
         /* Row: WAVE | BPM | RATE | PHS | DIST | RAND. */
         int const by = b.getY() + (b.getHeight() - bh) / 2;
@@ -308,7 +317,7 @@ void ModulatorCard::resized()
 
         wave->setBounds(x, by, wave_w, bh);
         x += wave_w + 4;
-        sync_bounds = juce::Rectangle<int>(x, by, bpm_w, bh);
+        sync_button->setBounds(x, by, bpm_w, bh);
         x += bpm_w + 6;
 
         int const n = knobs.size();
@@ -358,11 +367,50 @@ void ModulatorCard::resized()
 }
 
 
-void ModulatorCard::mouseDown(juce::MouseEvent const& event)
+void ModulatorCard::SyncButton::paint(juce::Graphics& g)
 {
-    if (type == Modulation::LFO && !lfo_expanded && sync_bounds.contains(event.getPosition())) {
-        toggle_sync();
+    bool const on = is_active && is_active();
+    juce::Colour const c = Theme::ACCENT;
+    juce::Rectangle<float> const r = getLocalBounds().toFloat().reduced(0.5f);
+    float const radius = 2.0f;
+
+    if (on) {
+        g.setColour(hover ? c.brighter(0.15f) : c);
+        g.fillRoundedRectangle(r, radius);
+    } else if (hover) {
+        g.setColour(c.withAlpha(0.18f));
+        g.fillRoundedRectangle(r, radius);
     }
+
+    g.setColour(on || !hover ? c : c.brighter(0.2f));
+    g.drawRoundedRectangle(r, radius, 1.0f);
+
+    /* Solid fill needs dark text for contrast; the outline state keeps it orange. */
+    g.setColour(on ? Theme::BG : c);
+    g.setFont(9.0f);
+    g.drawText("BPM", getLocalBounds(), juce::Justification::centred, false);
+}
+
+
+void ModulatorCard::SyncButton::mouseUp(juce::MouseEvent const& event)
+{
+    if (on_toggle && getLocalBounds().contains(event.getPosition())) {
+        on_toggle();
+    }
+}
+
+
+void ModulatorCard::SyncButton::mouseEnter(juce::MouseEvent const& /* event */)
+{
+    hover = true;
+    repaint();
+}
+
+
+void ModulatorCard::SyncButton::mouseExit(juce::MouseEvent const& /* event */)
+{
+    hover = false;
+    repaint();
 }
 
 
@@ -395,16 +443,6 @@ void ModulatorCard::paint(juce::Graphics& g)
         g.setColour(Theme::TEXT_DIM);
         g.drawText(dest, x, 3, right - x, 14, juce::Justification::centredLeft, false);
         x += (int)juce::GlyphArrangement::getStringWidth(df, dest) + 10;
-    }
-
-    /* LFO tempo-sync toggle (collapsed view only). */
-    if (type == Modulation::LFO && !lfo_expanded && !sync_bounds.isEmpty()) {
-        bool const on = bridge.get_discrete(Modulation::lfo_syn(rep)) != 0;
-        g.setColour(on ? Theme::LFO.withAlpha(0.35f) : Theme::INSET);
-        g.fillRoundedRectangle(sync_bounds.toFloat(), 2.0f);
-        g.setColour(on ? Theme::LFO : Theme::TEXT_DIM);
-        g.setFont(9.0f);
-        g.drawText("BPM", sync_bounds, juce::Justification::centred, false);
     }
 }
 
