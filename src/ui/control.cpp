@@ -92,11 +92,11 @@ class ModBadge : public juce::Component
             juce::Rectangle<float> const r = getLocalBounds().toFloat();
 
             if (!owner.assigned) {
-                /* Unassigned placeholder: a barely-there white fill chip (5%
+                /* Unassigned placeholder: a barely-there white fill chip (2.5%
                  * opacity, no outline) filling the same box an assigned badge
                  * would - just visible enough to reveal the modulation slot on
                  * every modulatable control. */
-                g.setColour(juce::Colours::white.withAlpha(0.05f));
+                g.setColour(juce::Colours::white.withAlpha(0.04f));
                 g.fillRoundedRectangle(r, 3.0f);
                 return;
             }
@@ -498,11 +498,17 @@ void Control::update_macro_assignment()
     mod_label = new_label;
     mod_colour = Theme::MIDI;
 
-    if (now) {
-        read_base_depth();
-    }
-
     if (changed) {
+        /* Only pull the base/depth here when the *assignment* itself changed (a
+         * source was just picked). Reading it on every frame would pre-empt the
+         * change detection in refresh()'s assigned branch (which captures the old
+         * base before calling read_base_depth), so an external reset of macro
+         * MIN/MAX - e.g. INIT, which preserves the macro's CC input so the cell
+         * stays assigned - would never repaint. That was the macro cells "not
+         * resetting on INIT" bug. */
+        if (now) {
+            read_base_depth();
+        }
         update_badge();
         if (badge != nullptr) {
             badge->repaint();
@@ -740,6 +746,18 @@ void Control::apply_base(double const b)
         bridge.set_ratio(Modulation::macro_min(mod_slot), base);
     }
 
+    /* Keep the destination param's own (unassigned) value in lock-step with the
+     * base, so removing the modulator leaves the knob exactly where it sits now
+     * instead of snapping back to the value it held when the modulator was first
+     * assigned. In macro-cell mode the destination *is* the macro MIN written
+     * above, so that write already covers it. */
+    if (!macro_mode) {
+        bridge.set_ratio(param_id, base);
+        for (Synth::ParamId const m : mirrors) {
+            bridge.set_ratio(m, base);
+        }
+    }
+
     double const target = juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth);
     double const target_ratio = visual_to_ratio(target);
     bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), target_ratio);
@@ -792,7 +810,15 @@ void Control::refresh()
             repaint();
         }
     } else {
-        double const live = current_ratio();
+        /* Re-read the live value from the bridge (not the cached ratio) so an
+         * external change - INIT, a loaded preset, host automation - actually
+         * moves the knob. Reading current_ratio() here would compare the cache
+         * against itself and never update, which is why macro-modulated controls
+         * (whose values differ from the default) visibly failed to reset on INIT
+         * while untouched knobs, already at their default, looked fine. */
+        double const live = has_value_hooks()
+            ? juce::jlimit(0.0, 1.0, read_value_hook())
+            : bridge.get_ratio(param_id);
 
         if (std::fabs(live - ratio) > 1.0e-6) {
             ratio = live;
@@ -889,7 +915,9 @@ juce::Rectangle<float> Control::knob_circle() const
             b.removeFromTop(STRIP);
         }
         if (label_pos == LabelPos::LEFT) {
-            b.removeFromLeft(LEFT_GUTTER);
+            /* An extra 2px past the caption gutter keeps a small breathing gap
+             * between a left-hand title (e.g. "MIX") and the pie. */
+            b.removeFromLeft(LEFT_GUTTER + 2);
             float const s = juce::jmin((float)b.getWidth(), (float)b.getHeight(), DOT_BOX);
             return juce::Rectangle<float>((float)b.getX(), b.getCentreY() - s * 0.5f, s, s).reduced(1.0f);
         }
@@ -1050,8 +1078,11 @@ void Control::paint_rotary(juce::Graphics& g)
     float const body = r - 4.0f;
     g.setColour(Theme::PANEL_2);
     g.fillEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f);
-    g.setColour(assigned ? active : Theme::EDGE);
-    g.drawEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f, assigned ? 1.5f : 1.0f);
+    /* The knob body border always keeps the normal (unmodulated) edge colour and
+     * weight even when assigned - only the position line and value arc take on the
+     * modulation colour. */
+    g.setColour(Theme::EDGE);
+    g.drawEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f, 1.0f);
 
     g.setColour(active);
     g.drawLine(cx, cy + 0.0f,

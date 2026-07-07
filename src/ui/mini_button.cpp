@@ -22,9 +22,56 @@
 
 #include "ui/theme.hpp"
 
+#include "BinaryData.h"
+
 
 namespace JS80P
 {
+
+namespace {
+
+/* Fixed glyph height for icon buttons: the icon draws at this size and is centred
+ * in whatever (taller) button height it is given, so enlarging the click target
+ * does not enlarge the icon. Paired with generous horizontal padding on each side
+ * of the glyph so the whole button is a large click target. */
+constexpr int ICON_GLYPH_H = 14;
+constexpr int ICON_H_PAD = 6;
+
+
+/* Crop a sub-rectangle of the embedded synth.png sprite and turn it into a white
+ * icon whose alpha channel is the sprite's luminance, so it can be tinted to any
+ * colour (the sprite's glyphs are light line-art on a near-black background). */
+juce::Image extract_glyph(int const x, int const y, int const w, int const h)
+{
+    static juce::Image const sheet = juce::ImageFileFormat::loadFrom(
+        (void const*)BinaryData::synth_png, (size_t)BinaryData::synth_pngSize
+    );
+
+    if (!sheet.isValid()) {
+        return juce::Image();
+    }
+
+    juce::Image glyph(juce::Image::ARGB, w, h, true);
+
+    for (int j = 0; j != h; ++j) {
+        for (int i = 0; i != w; ++i) {
+            juce::Colour const src = sheet.getPixelAt(x + i, y + j);
+            float const lum = (
+                0.299f * src.getFloatRed()
+                + 0.587f * src.getFloatGreen()
+                + 0.114f * src.getFloatBlue()
+            );
+            /* Lift the near-black floor and clip at the glyph's peak brightness so
+             * the background goes fully transparent and the strokes fully opaque. */
+            float const a = juce::jlimit(0.0f, 1.0f, (lum - 0.05f) / 0.60f);
+            glyph.setPixelAt(i, j, juce::Colours::white.withAlpha(a));
+        }
+    }
+
+    return glyph;
+}
+
+}
 
 MiniButton::MiniButton(
         ParamBridge& bridge,
@@ -54,6 +101,33 @@ MiniButton::MiniButton(juce::String label, std::function<void()> on_click)
 }
 
 
+MiniButton::MiniButton(juce::Image icon, std::function<void()> on_click)
+    : bridge(nullptr),
+    param_id(Synth::ParamId::INVALID_PARAM_ID),
+    on_click(std::move(on_click)),
+    icon(std::move(icon)),
+    action(true),
+    value(0),
+    hover(false)
+{
+    setWantsKeyboardFocus(false);
+}
+
+
+juce::Image MiniButton::preset_icon(Icon const which)
+{
+    /* Bounding boxes (in synth.png pixels) of the folder / dice / download glyphs
+     * that sit at the top-left of the legacy Synth panel, with a 1px margin so the
+     * antialiased edges are not clipped when the icon is scaled down. */
+    switch (which) {
+        case Icon::OPEN:      return extract_glyph(18, 75, 44, 37);
+        case Icon::RANDOMIZE: return extract_glyph(63, 72, 45, 43);
+        case Icon::SAVE:      return extract_glyph(113, 70, 39, 48);
+        default:              return juce::Image();
+    }
+}
+
+
 void MiniButton::set_option_labels(juce::StringArray labels)
 {
     option_labels = std::move(labels);
@@ -62,6 +136,14 @@ void MiniButton::set_option_labels(juce::StringArray labels)
 
 int MiniButton::preferred_width() const
 {
+    if (icon.isValid()) {
+        /* Glyph drawn at the fixed glyph height, wrapped in generous side padding. */
+        int const glyph_w = juce::roundToInt(
+            (float)icon.getWidth() * (float)ICON_GLYPH_H / (float)icon.getHeight()
+        );
+        return glyph_w + 2 * ICON_H_PAD;
+    }
+
     juce::Font const f(juce::FontOptions().withHeight(9.0f));
     float w = juce::GlyphArrangement::getStringWidth(f, label);
 
@@ -90,9 +172,35 @@ void MiniButton::refresh()
 
 void MiniButton::paint(juce::Graphics& g)
 {
+    juce::Colour const c = Theme::ACCENT;
+
+    /* Icon action buttons: no outline box, just the glyph tinted to the accent
+     * colour, centred within a wide (padded) click target. */
+    if (icon.isValid()) {
+        if (hover) {
+            g.setColour(c.withAlpha(0.18f));
+            g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 2.0f);
+        }
+
+        float const glyph_h = (float)ICON_GLYPH_H;
+        float const scale = glyph_h / (float)icon.getHeight();
+        float const glyph_w = (float)icon.getWidth() * scale;
+        float const gx = ((float)getWidth() - glyph_w) * 0.5f;
+        float const gy = ((float)getHeight() - glyph_h) * 0.5f;
+
+        /* Fill the glyph's alpha channel with the accent colour (brightened on
+         * hover) - a clean tint of the white-on-transparent icon. */
+        g.setColour(hover ? c.brighter(0.25f) : c);
+        g.drawImageTransformed(
+            icon,
+            juce::AffineTransform::scale(scale).translated(gx, gy),
+            true
+        );
+        return;
+    }
+
     /* Action buttons always render in the outline (off) state. */
     bool const on = !action && value != 0;
-    juce::Colour const c = Theme::ACCENT;
     juce::Rectangle<float> const r = getLocalBounds().toFloat().reduced(0.5f);
     float const radius = 2.0f;
 

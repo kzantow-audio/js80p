@@ -94,6 +94,9 @@ class EffectsPage : public juce::Component
             std::vector<MiniButton*> buttons;        /* title bar, right-aligned */
             std::vector<AnchoredButton> anchored;    /* title bar, over a knob */
             Control* header_mix = nullptr;           /* WET/DRY pie, title bar right */
+            Control* header_knob = nullptr;          /* single-param pie, title bar */
+            bool fill = false;   /* stretch to share the row's leftover width */
+            int right_pad = -1;  /* explicit right pad (px); -1 = auto (MOD_RIGHT_PAD) */
             juce::Rectangle<int> bounds;
         };
 
@@ -113,6 +116,9 @@ class EffectsPage : public juce::Component
         void add_large(int const panel, std::initializer_list<KnobSpec> const specs);
         void add_medium(int const panel, std::initializer_list<KnobSpec> const specs);
         void add_mix(int const panel, Synth::ParamId const wet, Synth::ParamId const dry);
+        /** Add a single-param pie to the panel's title bar (like the MIX pie but
+         *  bound directly to one parameter, e.g. TAPE's HISS). */
+        Control* add_header_knob(int const panel, Synth::ParamId const id, juce::String label);
         MiniButton* add_button(
             int const panel,
             Synth::ParamId const id,
@@ -124,6 +130,9 @@ class EffectsPage : public juce::Component
         MiniButton* add_button_trailing(
             int const panel, Synth::ParamId const id, juce::String label
         );
+        /** True when a panel's last (right-most) cell is a modulation
+         *  destination, so its mod badge overhangs the panel's right edge. */
+        bool last_cell_modulatable(Panel const& panel) const;
         juce::Point<int> panel_size(Panel const& panel) const;
         void place_panel(Panel& panel);
         void layout();

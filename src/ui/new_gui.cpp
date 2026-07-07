@@ -16,6 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cmath>
+#include <map>
+#include <set>
+#include <utility>
+
 #include "ui/new_gui.hpp"
 
 #include "serializer.hpp"
@@ -58,6 +63,9 @@ NewGui::NewGui(Synth& synth)
     macro_strip(bridge),
     effects_page(bridge, manager),
     active_page(Page::SYNTH),
+    saved_macros(),
+    restore_macros_ticks(0),
+    randomize_signature(0.0),
     osc1_wave(nullptr),
     osc2_wave(nullptr),
     mode_selector(nullptr),
@@ -87,10 +95,18 @@ NewGui::NewGui(Synth& synth)
         header_buttons.add(button);
         addAndMakeVisible(button);
     };
+    auto add_header_icon = [this](MiniButton::Icon icon, std::function<void()> action) {
+        MiniButton* const button =
+            new MiniButton(MiniButton::preset_icon(icon), std::move(action));
+        header_buttons.add(button);
+        addAndMakeVisible(button);
+    };
+    /* INIT is a text button; OPEN / RND / SAVE reuse the folder / dice / download
+     * glyphs from the legacy synth.png, tinted orange. */
     add_header_button("INIT", [this]() { init_patch(); });
-    add_header_button("OPEN", [this]() { open_preset(); });
-    add_header_button("RND",  [this]() { randomize_preset(); });
-    add_header_button("SAVE", [this]() { save_preset(); });
+    add_header_icon(MiniButton::Icon::OPEN,      [this]() { open_preset(); });
+    add_header_icon(MiniButton::Icon::RANDOMIZE, [this]() { randomize_preset(); });
+    add_header_icon(MiniButton::Icon::SAVE,      [this]() { save_preset(); });
 
     /* Global effect output volume, promoted to a header knob (right of the
      * tabs). Bare dial with the OUT caption drawn to its left; a macro-
@@ -275,6 +291,21 @@ FilterPanel* NewGui::add_filters(
 
 void NewGui::timerCallback()
 {
+    /* A pending RANDOMIZE: once the audio thread has applied it (the macro
+     * fingerprint changes) - or a ~1s safety timeout elapses - relocate its use
+     * of macros 1-8 and write the saved performance macros back. */
+    if (restore_macros_ticks > 0) {
+        --restore_macros_ticks;
+
+        bool const drained =
+            std::fabs(macro_signature() - randomize_signature) > 1.0e-9;
+
+        if (drained || restore_macros_ticks == 0) {
+            restore_macros_ticks = 0;
+            restore_performance_macros();
+        }
+    }
+
     /* Keep grouped duplicates in sync before regrouping, so a shape edit
      * doesn't momentarily split a group. */
     for (ModulatorCard* const card : cards) {
@@ -527,11 +558,155 @@ void NewGui::save_preset()
 }
 
 
+double NewGui::macro_signature() const
+{
+    /* A cheap fingerprint of the 8 performance macros (input + range), used to
+     * notice when the audio-thread RANDOMIZE has actually landed. */
+    double s = 0.0;
+
+    for (int m = 1; m <= MacroStrip::COUNT; ++m) {
+        s += bridge.get_ratio(Modulation::macro_min(m)) * 7.0;
+        s += bridge.get_ratio(Modulation::macro_max(m)) * 13.0;
+        s += (double)(int)bridge.controller(Modulation::macro_in(m));
+    }
+
+    return s;
+}
+
+
 void NewGui::randomize_preset()
 {
+    /* Snapshot the 8 performance macros' input + range before the random patch
+     * generator (which consumes macro slots from 1 upward) overwrites them. */
+    for (int m = 0; m != MacroStrip::COUNT; ++m) {
+        saved_macros[m].input = bridge.controller(Modulation::macro_in(m + 1));
+        saved_macros[m].min = bridge.get_ratio(Modulation::macro_min(m + 1));
+        saved_macros[m].max = bridge.get_ratio(Modulation::macro_max(m + 1));
+    }
+
+    randomize_signature = macro_signature();
+
     bridge.get_synth().push_message(
         Synth::MessageType::RANDOMIZE, Synth::ParamId::INVALID_PARAM_ID, 0.0, 0
     );
+
+    /* RANDOMIZE is processed on the audio thread; defer the macro restore until
+     * it has drained so we can see (and relocate) the params it wired to macros
+     * 1-8. timerCallback() polls macro_signature() and, once it changes (or a ~1s
+     * timeout elapses), calls restore_performance_macros(). */
+    restore_macros_ticks = 30;
+}
+
+
+void NewGui::restore_performance_macros()
+{
+    using P = Synth::ParamId;
+
+    int const N = MacroStrip::COUNT;   /* 8 performance macros */
+
+    /* 1. Scan every parameter's controller once. Record which macro slots are
+     *    referenced anywhere (so relocation can pick genuinely free pool slots),
+     *    and every param the random patch wired to a performance macro (1-8). */
+    std::set<int> used_macro;
+    std::vector<std::pair<P, int>> refs_to_perf;   /* (param, perf slot 1..N) */
+
+    for (int p = 0; p != (int)P::PARAM_ID_COUNT; ++p) {
+        P const id = (P)p;
+        Modulation::Type type;
+        int slot;
+
+        if (Modulation::decode(bridge.controller(id), type, slot)
+                && type == Modulation::MACRO) {
+            used_macro.insert(slot);
+
+            if (slot >= 1 && slot <= N) {
+                refs_to_perf.push_back({ id, slot });
+            }
+        }
+    }
+
+    /* Copy a macro's full definition (input controller + the 7-param block +
+     * distortion curve) from one slot to another. */
+    auto copy_macro = [this](int const from, int const to) {
+        int const bf = (int)Modulation::macro_in(from) - 1;   /* M?MID, block start */
+        int const bt = (int)Modulation::macro_in(to) - 1;
+
+        for (int k = 0; k != 7; ++k) {
+            P const src = (P)(bf + k);
+            P const dst = (P)(bt + k);
+
+            if (k == 1) {   /* the input is a controller assignment, not a ratio */
+                bridge.assign_controller(dst, bridge.controller(src));
+            } else {
+                bridge.set_ratio(dst, bridge.get_ratio(src));
+            }
+        }
+
+        bridge.set_ratio(Modulation::macro_dcv(to), bridge.get_ratio(Modulation::macro_dcv(from)));
+    };
+
+    auto alloc_free = [&used_macro]() -> int {
+        for (int s = Modulation::MACRO_POOL_FIRST; s <= Modulation::MACRO_POOL_LAST; ++s) {
+            if (used_macro.count(s) == 0) {
+                used_macro.insert(s);
+                return s;
+            }
+        }
+        return 0;   /* pool exhausted */
+    };
+
+    /* 2. Relocate the random patch's use of macros 1-8 onto free pool slots:
+     *    copy each used performance macro's random definition to a fresh slot and
+     *    repoint every referencing param there. Params that shared a performance
+     *    macro move together to the same relocated slot. */
+    std::map<int, int> relocated;   /* perf slot -> new pool slot */
+
+    for (std::pair<P, int> const& ref : refs_to_perf) {
+        int const perf = ref.second;
+
+        if (relocated.count(perf) == 0) {
+            int const dst = alloc_free();
+
+            if (dst == 0) {
+                break;   /* no free pool slots; leave the rest on 1-8 */
+            }
+
+            copy_macro(perf, dst);
+            relocated[perf] = dst;
+        }
+
+        bridge.assign_controller(
+            ref.first, Modulation::controller_id(Modulation::MACRO, relocated[perf])
+        );
+    }
+
+    /* 3. Reset macros 1-8 to a clean default, then write back the captured input
+     *    + range, so the performance macros survive the randomize intact. */
+    for (int m = 0; m != N; ++m) {
+        int const slot = m + 1;
+        int const base = (int)Modulation::macro_in(slot) - 1;
+
+        for (int k = 0; k != 7; ++k) {
+            P const id = (P)(base + k);
+
+            if (k == 1) {
+                bridge.assign_controller(id, Synth::ControllerId::NONE);
+            } else {
+                bridge.set_ratio(id, bridge.get_default_ratio(id));
+            }
+        }
+
+        bridge.set_ratio(
+            Modulation::macro_dcv(slot), bridge.get_default_ratio(Modulation::macro_dcv(slot))
+        );
+
+        if (saved_macros[m].input != Synth::ControllerId::NONE) {
+            bridge.assign_controller(Modulation::macro_in(slot), saved_macros[m].input);
+        }
+
+        bridge.set_ratio(Modulation::macro_min(slot), saved_macros[m].min);
+        bridge.set_ratio(Modulation::macro_max(slot), saved_macros[m].max);
+    }
 }
 
 
@@ -575,16 +750,23 @@ void NewGui::resized()
     header_bounds = area.removeFromTop(46);
 
     /* Header action buttons, left-aligned just after the JS80P title, laid out
-     * left to right at the mini-button height. */
+     * left to right. INIT is a slightly taller button; the icon buttons share its
+     * height for a larger click target (their glyphs stay the same size, centred). */
     {
-        int const bh = 16;
+        int const bh = 20;
         int const by = header_bounds.getCentreY() - bh / 2;
         int bx = header_bounds.getX() + 96;
 
-        for (MiniButton* const button : header_buttons) {
+        for (int i = 0; i != header_buttons.size(); ++i) {
+            MiniButton* const button = header_buttons[i];
             int const bw = button->preferred_width();
             button->setBounds(bx, by, bw, bh);
             bx += bw + 4;
+            /* Extra breathing room after the INIT button (first), separating it
+             * from the OPEN / RND / SAVE preset icons. */
+            if (i == 0) {
+                bx += 4;
+            }
         }
     }
 
@@ -883,11 +1065,12 @@ void NewGui::paint(juce::Graphics& g)
 
     /* Signal-flow hint: two small right-pointing triangles in the mix column,
      * one hugging OSC 1 (flow into the mix knobs) and one hugging OSC 2 (flow
-     * out to the carrier). */
+     * out to the carrier). Sat a quarter of the way down the column (rather than
+     * dead-centre) so they line up with the upper mix controls. */
     {
         float const h = 8.0f;
         float const w = h * 0.62f;
-        float const cy = (float)mix_bounds.getCentreY();
+        float const cy = (float)mix_bounds.getY() + (float)mix_bounds.getHeight() / 4.0f;
         auto arrow = [&g, h, w, cy](float const cx) {
             juce::Path tri;
             tri.startNewSubPath(cx - w * 0.5f, cy - h * 0.5f);

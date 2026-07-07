@@ -56,6 +56,16 @@ class MiniButton : public juce::Component
         /** Action button: outline styling, fires \c on_click, no bound param. */
         MiniButton(juce::String label, std::function<void()> on_click);
 
+        /** The preset-action glyphs baked into the legacy synth.png sprite. */
+        enum class Icon { OPEN, RANDOMIZE, SAVE };
+
+        /** Icon action button: draws \c icon (tinted to the accent colour) with
+         *  generous horizontal padding, fires \c on_click, no bound param. */
+        MiniButton(juce::Image icon, std::function<void()> on_click);
+
+        /** Crop one of the preset-action glyphs from the embedded synth.png. */
+        static juce::Image preset_icon(Icon which);
+
         /** Show the current option's name (from \c labels) instead of the fixed
          *  label text. */
         void set_option_labels(juce::StringArray labels);
@@ -76,6 +86,7 @@ class MiniButton : public juce::Component
         juce::String label;
         juce::StringArray option_labels;
         std::function<void()> on_click;   /* set for action buttons */
+        juce::Image icon;                 /* set for icon action buttons */
         bool action;
         int value;
         bool hover;

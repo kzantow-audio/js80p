@@ -74,6 +74,10 @@ ModulatorCard::ModulatorCard(
             k->set_manager(&manager);
             k->set_mod_caps(Modulation::CAP_MACRO);   /* envelope params: macros only */
             k->set_center_value(1.0);   /* time knobs: exponential, 1 second midpoint */
+            /* No reserved value strip: the value shows in the hover/drag popover,
+             * so the blank strip below each dial is reclaimed and the card is that
+             * much shorter (see preferred_height / resized). */
+            k->set_value_display(Control::ValueDisplay::POPOVER);
         }
 
         knobs[0]->set_mirrors(mirror(Modulation::env_del));
@@ -114,6 +118,7 @@ ModulatorCard::ModulatorCard(
             [](double const v) { return juce::String(v, 2); }
         );
         sus_fader->set_hook_default(def_fraction);
+        sus_fader->set_value_display(Control::ValueDisplay::POPOVER);   /* reclaim the value strip */
         /* SUS is a macro-modulation destination like the other envelope params;
          * once assigned it edits env_sus directly (the fraction hook and the
          * periodic write_sustain step aside — see refresh / write_sustain). */
@@ -190,6 +195,7 @@ ModulatorCard::ModulatorCard(
         for (Knob* const k : knobs) {
             k->set_manager(&manager);
             k->set_mod_caps(Modulation::CAP_LFO | Modulation::CAP_MACRO);   /* LFOs + macros */
+            k->set_value_display(Control::ValueDisplay::POPOVER);   /* reclaim the value strip */
         }
 
         knobs[0]->set_mirrors(mirror(Modulation::lfo_frq));
@@ -206,8 +212,9 @@ ModulatorCard::ModulatorCard(
 
 int ModulatorCard::preferred_height() const
 {
-    /* Match the oscillator knob size (cell height 72) + header + padding. */
-    return 100;
+    /* Header + a knob cell whose dial is the oscillator size, minus the value
+     * strip the dials no longer reserve (they use the popover). 100 - 14 = 86. */
+    return 86;
 }
 
 
@@ -363,23 +370,29 @@ void ModulatorCard::resized()
         wave->setVisible(true);
         sync_button->setVisible(true);
 
-        /* Row: WAVE | BPM | RATE | PHS | DIST | RAND. */
-        int const by = b.getY() + (b.getHeight() - bh) / 2;
-        int const wave_w = 36;
-        int const bpm_w = 30;
-        int x = b.getX();
-
-        wave->setBounds(x, by, wave_w, bh);
-        x += wave_w + 4;
-        sync_button->setBounds(x, by, bpm_w, bh);
-        x += bpm_w + 6;
-
+        /* All four knobs (RATE | PHS | DIST | RAND) packed tightly against the
+         * right edge; the WAVE shape button fills the leftover space to their
+         * left, centred in it. */
         int const n = knobs.size();
-        int const cell = n > 0 ? (b.getRight() - x) / n : 0;
+        int const cell = 52;   /* tight fixed knob cell, not stretched to fill */
+        int const knobs_x = b.getRight() - n * cell;
+
         for (int i = 0; i != n; ++i) {
             knobs[i]->setVisible(true);
-            knobs[i]->setBounds(x + i * cell, b.getY(), cell, b.getHeight());
+            knobs[i]->setBounds(knobs_x + i * cell, b.getY(), cell, b.getHeight());
         }
+
+        int const wave_w = 36;
+        int const wy = b.getY() + (b.getHeight() - bh) / 2;
+        int const wx = b.getX() + juce::jmax(0, (knobs_x - b.getX() - wave_w) / 2);
+        wave->setBounds(wx, wy, wave_w, bh);
+
+        /* BPM tempo-sync toggle lives in the title bar, centred over the RATE
+         * knob, exactly like the CHORUS/ECHO BPM toggles over FREQ / DELAY. */
+        int const bpm_w = 30;
+        int const bpm_h = 14;
+        int const bpm_x = knobs[0]->getBounds().getCentreX() - bpm_w / 2;
+        sync_button->setBounds(bpm_x, 3, bpm_w, bpm_h);
         return;
     }
 
@@ -389,16 +402,18 @@ void ModulatorCard::resized()
      * their own space along the bottom edge. */
     int const cw = 16;   /* curve square */
     int const sw = 26;   /* sustain fader */
-    int const sus_pad = 4;   /* room right of SUS so a wide mod source clears REL */
+    int const sus_pad = 6;   /* room right of SUS so a wide mod source clears REL */
     int const kw = juce::jmax(28, (b.getWidth() - 3 * cw - sw - sus_pad) / 5);
     int const total = 5 * kw + 3 * cw + sw + sus_pad;
     int const h = b.getHeight();
     int x = b.getX() + juce::jmax(0, (b.getWidth() - total) / 2);
 
-    /* Bottom of a knob's circle (mirrors Knob::knob_circle), so the curve
-     * squares line up with the base of the knobs, not the value text. */
-    int const circle = juce::jmin(kw - 4, h - 32);
-    int const circle_bottom = h / 2 + circle / 2 - 3;
+    /* Bottom of a knob's circle (mirrors Knob::knob_circle), so the curve squares
+     * line up with the base of the dials. The dials reserve a top caption strip
+     * (14) but no bottom value strip, so the dial box is h-18 and its centre sits
+     * 7px below the cell midline (not on it). */
+    int const circle = juce::jmin(kw - 4, h - 18);
+    int const circle_bottom = h / 2 + circle / 2 + 4;
 
     auto place_knob = [&](int const i) {
         knobs[i]->setBounds(x, b.getY(), kw, h);
@@ -490,9 +505,15 @@ void ModulatorCard::paint(juce::Graphics& g)
     /* Keep the header text clear of the right-side header controls: on envelope
      * cards the SCL slider (with the instability dots beyond it) owns the right
      * of the row, so the title must stop at the SCL's left edge. */
-    int const right = (env_scale != nullptr)
-        ? juce::jmax(left, env_scale->getX() - 6)
-        : getWidth() - 8;
+    int right = getWidth() - 8;
+
+    if (env_scale != nullptr) {
+        right = juce::jmax(left, env_scale->getX() - 6);
+    } else if (sync_button != nullptr && sync_button->isVisible()) {
+        /* LFO cards: the BPM toggle sits in the title bar over RATE, so the
+         * connection labels must stop at its left edge. */
+        right = juce::jmax(left, sync_button->getX() - 6);
+    }
     int const avail = right - left;
 
     /* Preferred layout: each slot next to its destination -

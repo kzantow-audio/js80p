@@ -41,6 +41,10 @@ static constexpr int PANEL_GAP = 6;
 /* Gap between adjacent knob cells so a knob's modulation badge (top-right of the
  * dial) has room and does not overlap the next cell. */
 static constexpr int CELL_GAP = 8;
+/* Extra right padding for panels whose last (right-most) control is a modulation
+ * destination: keeps its mod badge clear of the edge and gives the panel some
+ * breathing room now that the row 1 panels no longer need every spare pixel. */
+static constexpr int MOD_RIGHT_PAD = 14;
 
 
 EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
@@ -97,14 +101,21 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     /* Tempo-sync toggle for the LFO rate, centred over the FREQ knob. */
     add_button(chorus, P::ECSYN, "BPM", P::ECFRQ);
 
-    /* TAPE: STOP is a large primary knob and sits last in the row. */
+    /* TAPE: STOP is a large primary knob and sits last in the row. HISS moves to
+     * the title bar as a standard pie (right-aligned, left of the PRE/POST FX
+     * button). */
     int const tape = begin_panel("TAPE", 1);
+    /* STOP is a large knob, whose mod badge overhangs its cell ~2px less than a
+     * medium knob's; trim 2px off the default pad so its mod box clears the panel
+     * edge by 12px, matching CHORUS (which ends on a medium HP Q knob). */
+    panels[(size_t)tape].right_pad = MOD_RIGHT_PAD - 2;
     add_large(tape, { { P::ETWFA, "WOW" }, { P::ETSAT, "SAT" } });
     add_medium(tape, {
         { P::ETWFS, "SPEED" }, { P::ETCLR, "COLOR" },
-        { P::ETSTR, "STEREO" }, { P::ETSTYP, "TYPE" }, { P::ETHSS, "HISS" }
+        { P::ETSTR, "STEREO" }, { P::ETSTYP, "TYPE" }
     });
     add_large(tape, { { P::ETSTP, "STOP" } });
+    add_header_knob(tape, P::ETHSS, "HISS");
     add_button(tape, P::ETEND, "PRE FX")
         ->set_option_labels({ "PRE FX", "POST FX" });
 
@@ -315,6 +326,25 @@ void EffectsPage::add_mix(
 }
 
 
+Control* EffectsPage::add_header_knob(
+        int const panel, Synth::ParamId const id, juce::String label
+) {
+    /* A single-parameter version of the header MIX pie: the same small LEFT-
+     * captioned DOT control, but bound directly to one param (e.g. TAPE HISS,
+     * which is an unmodulatable trim, so no modulation manager / badge). */
+    Control* const knob = new Control(
+        bridge, id, std::move(label), Control::Style::DOT, Control::Size::TINY
+    );
+    knob->set_label_placement(Control::LabelPos::LEFT);
+    knob->set_value_display(Control::ValueDisplay::POPOVER);
+
+    mix_knobs.add(knob);
+    content.addAndMakeVisible(knob);
+    panels[(size_t)panel].header_knob = knob;
+    return knob;
+}
+
+
 MiniButton* EffectsPage::add_button(
         int const panel, Synth::ParamId const id, juce::String label,
         Synth::ParamId const anchor
@@ -351,6 +381,22 @@ void EffectsPage::resized()
 }
 
 
+bool EffectsPage::last_cell_modulatable(Panel const& panel) const
+{
+    if (panel.cells.empty()) {
+        return false;
+    }
+
+    Cell const& last = panel.cells.back();
+
+    if (last.mix != nullptr) {
+        return true;   /* the WET/DRY MIX cell is a macro destination */
+    }
+
+    return !bridge.is_discrete(last.id) && fx_mod_caps(last.id) != 0;
+}
+
+
 juce::Point<int> EffectsPage::panel_size(Panel const& p) const
 {
     int inner = 0;
@@ -361,8 +407,16 @@ juce::Point<int> EffectsPage::panel_size(Panel const& p) const
         inner += CELL_GAP * ((int)p.cells.size() - 1);
     }
 
+    /* Give panels whose last control is modulatable extra right padding so that
+     * control's mod badge does not overhang the panel edge, and so the panel is
+     * not cramped. (The CHORUS / TAPE panels flex to fill row 1, so this base pad
+     * is subsumed by their leftover share.) */
+    int const right_pad = p.right_pad >= 0
+        ? p.right_pad
+        : (last_cell_modulatable(p) ? MOD_RIGHT_PAD : 0);
+
     return juce::Point<int>(
-        inner + 2 * PANEL_PAD, TITLE_H + KNOB_H + PANEL_PAD
+        inner + 2 * PANEL_PAD + right_pad, TITLE_H + KNOB_H + PANEL_PAD
     );
 }
 
@@ -422,10 +476,12 @@ void EffectsPage::place_panel(Panel& panel)
     int bx = panel.bounds.getRight() - PANEL_PAD;
 
     /* Title-bar MIX pie, pinned to the panel's right edge: caption + pie + its
-     * (empty) modulation box, which overhangs to the pie's right. */
+     * (empty) modulation box, which overhangs to the pie's right. The box is
+     * sized with a little slack (margin) around the pie so its top reach-ring and
+     * right-hand modulation badge are not clipped by the control's own bounds. */
     if (panel.header_mix != nullptr) {
-        int const mw = 68;
-        int const mh = 18;
+        int const mw = 74;
+        int const mh = 22;
         bx -= mw;
         panel.header_mix->setBounds(bx, panel.bounds.getY() + 14 - mh / 2, mw, mh);
         bx -= 6;
@@ -437,6 +493,17 @@ void EffectsPage::place_panel(Panel& panel)
         bx -= bw;
         panel.buttons[(size_t)i]->setBounds(bx, by, bw, bh);
         bx -= 4;
+    }
+
+    /* Title-bar single-param pie (e.g. TAPE HISS), placed to the left of the
+     * right-aligned buttons: caption + pie, no modulation box, so it is narrower
+     * than the MIX pie. */
+    if (panel.header_knob != nullptr) {
+        int const kw = 54;
+        int const kh = 22;
+        bx -= kw;
+        panel.header_knob->setBounds(bx, panel.bounds.getY() + 14 - kh / 2, kw, kh);
+        bx -= 6;
     }
 }
 
@@ -456,20 +523,53 @@ void EffectsPage::layout()
     int content_w = 0;
 
     for (int row = 0; row <= max_row; ++row) {
-        int x = 0;
-        int row_h = 0;
+        /* First pass: gather this row's panels and their natural sizes, and count
+         * the ones that flex to fill leftover width. */
+        std::vector<Panel*> row_panels;
+        int natural_w = 0;
+        int fill_count = 0;
 
         for (Panel& panel : panels) {
             if (panel.row != row) {
                 continue;
             }
-
             juce::Point<int> const sz = panel_size(panel);
-            panel.bounds = juce::Rectangle<int>(x, y, sz.x, sz.y);
+            panel.bounds.setSize(sz.x, sz.y);   /* stash natural size for pass 2 */
+            row_panels.push_back(&panel);
+            natural_w += sz.x;
+            if (panel.fill) {
+                ++fill_count;
+            }
+        }
+
+        if (row_panels.empty()) {
+            continue;
+        }
+
+        /* Split any leftover width equally among the flex panels so together they
+         * fill the row (minus the inter-panel gaps). */
+        int const gaps = ((int)row_panels.size() - 1) * PANEL_GAP;
+        int extra = 0;
+        if (fill_count > 0) {
+            int const leftover = avail - natural_w - gaps;
+            if (leftover > 0) {
+                extra = leftover / fill_count;
+            }
+        }
+
+        /* Second pass: place left to right. */
+        int x = 0;
+        int row_h = 0;
+
+        for (Panel* const pp : row_panels) {
+            Panel& panel = *pp;
+            int const w = panel.bounds.getWidth() + (panel.fill ? extra : 0);
+            int const h = panel.bounds.getHeight();
+            panel.bounds = juce::Rectangle<int>(x, y, w, h);
             place_panel(panel);
 
-            x += sz.x + PANEL_GAP;
-            row_h = juce::jmax(row_h, sz.y);
+            x += w + PANEL_GAP;
+            row_h = juce::jmax(row_h, h);
         }
 
         content_w = juce::jmax(content_w, x - PANEL_GAP);
