@@ -95,12 +95,6 @@ NewGui::NewGui(Synth& synth)
     out_knob->set_source_placeholder(true);   /* always show an (empty) modulation box */
     addAndMakeVisible(*out_knob);
 
-    /* Per-effect WET/DRY MIX knobs live in the header (they used to sit at the
-     * front of each effect panel and made the CHORUS/TAPE row too wide). */
-    add_header_mix(Synth::ParamId::ECWET, Synth::ParamId::ECDRY, "CHO");
-    add_header_mix(Synth::ParamId::EEWET, Synth::ParamId::EEDRY, "ECH");
-    add_header_mix(Synth::ParamId::ERWET, Synth::ParamId::ERDRY, "REV");
-
     /* The EFFECTS page shares the body area; hidden until its tab is active. */
     addChildComponent(effects_page);
 
@@ -224,47 +218,6 @@ Control* NewGui::add_dot(Synth::ParamId const id, char const* const title, char 
 }
 
 
-Control* NewGui::add_header_mix(
-        Synth::ParamId const wet, Synth::ParamId const dry, char const* const title
-) {
-    /* One rotary folding an effect's WET / DRY volumes into a single MIX (same
-     * mapping as the old in-panel MIX knob). Small header dial with a caption to
-     * the left and no on-dial value — the popover shows it on hover. */
-    ParamBridge* const bp = &bridge;
-
-    auto const read_mix = [bp, wet, dry]() -> double {
-        double const w = bp->get_ratio(wet);
-        double const d = bp->get_ratio(dry);
-        return w >= d ? juce::jlimit(0.5, 1.0, 1.0 - d * 0.5)
-                      : juce::jlimit(0.0, 0.5, w * 0.5);
-    };
-    auto const write_mix = [bp, wet, dry](double const m) {
-        bp->set_ratio(wet, juce::jmin(1.0, 2.0 * m));
-        bp->set_ratio(dry, juce::jmin(1.0, 2.0 * (1.0 - m)));
-    };
-    auto const format_mix = [](double const m) {
-        int const wet_pct = (int)std::lround(juce::jmin(1.0, 2.0 * m) * 100.0);
-        int const dry_pct = (int)std::lround(juce::jmin(1.0, 2.0 * (1.0 - m)) * 100.0);
-        return juce::String(wet_pct) + "/" + juce::String(dry_pct);
-    };
-
-    Control* const mix = new Control(
-        bridge, wet, title, Control::Style::ROTARY, Control::Size::SMALL
-    );
-    mix->set_value_hooks(read_mix, write_mix, format_mix);
-    mix->set_hook_default(0.5);
-    mix->set_label_placement(Control::LabelPos::LEFT);
-    mix->set_value_display(Control::ValueDisplay::NONE);
-    mix->set_manager(&manager);
-    mix->set_mod_caps(Modulation::CAP_MACRO);
-    mix->set_source_placeholder(true);   /* reserve / show the modulation box */
-    header_mixes.add(mix);
-    addAndMakeVisible(mix);
-
-    return mix;
-}
-
-
 WaveformSelector* NewGui::add_wave(Synth::ParamId const id)
 {
     WaveformSelector* const wave = new WaveformSelector(bridge, id);
@@ -331,10 +284,6 @@ void NewGui::timerCallback()
     }
 
     out_knob->refresh();
-
-    for (Control* const mix : header_mixes) {
-        mix->refresh();
-    }
 
     for (Knob* const knob : knobs) {
         knob->refresh();
@@ -535,21 +484,6 @@ void NewGui::resized()
             juce::Rectangle<int>(kx - 4 - 34, header_bounds.getY(), 34, header_bounds.getHeight());
     }
 
-    /* Per-effect MIX knobs, in the header gap left of the tabs. Each is a small
-     * left-captioned dial; the gap between them leaves room for the modulation
-     * box that overhangs each dial's right. */
-    {
-        int const mw = 60;
-        int const mh = 34;
-        int const gap = 20;
-        int const my = header_bounds.getCentreY() - mh / 2;
-        int mx = header_bounds.getX() + 160;
-        for (Control* const mix : header_mixes) {
-            mix->setBounds(mx, my, mw, mh);
-            mx += mw + gap;
-        }
-    }
-
     /* SYNTH / EFFECTS tabs, centred in the header row. */
     {
         int const tab_w = 92;
@@ -612,7 +546,7 @@ void NewGui::resized()
      * vertically centred on the 13px title text (see draw_section_title). */
     auto place_dots = [](
             juce::Rectangle<int> const& panel, Control* const a, Control* const b) {
-        int const sz = 12;
+        int const sz = 16;
         int const gap = 5;
         int const right = panel.getRight() - 10;
         int const y = panel.getY() + 19 - sz / 2;   /* title text centre */

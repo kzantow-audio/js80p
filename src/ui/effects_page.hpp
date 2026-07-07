@@ -93,6 +93,7 @@ class EffectsPage : public juce::Component
             std::vector<Cell> cells;                 /* controls, left to right */
             std::vector<MiniButton*> buttons;        /* title bar, right-aligned */
             std::vector<AnchoredButton> anchored;    /* title bar, over a knob */
+            Control* header_mix = nullptr;           /* WET/DRY pie, title bar right */
             juce::Rectangle<int> bounds;
         };
 

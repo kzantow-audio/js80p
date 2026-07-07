@@ -104,6 +104,13 @@ class Control : public juce::Component, public juce::SettableTooltipClient
          *  which write one shared value to every group member. */
         void set_value_mirrors(std::vector<Synth::ParamId> params);
 
+        /** Parameters that receive an *inverse* (1 - value) copy of the
+         *  modulation: assigning a source here also drives each of these through a
+         *  parallel macro whose range is the complement of this control's, and the
+         *  ranges stay in sync as the base/depth change. Used by the WET/DRY MIX so
+         *  a modulator crossfades DRY down as it sweeps WET up. */
+        void set_inverse_mirrors(std::vector<Synth::ParamId> params);
+
         void set_center_value(double const display_value);
 
         /** Restrict the control's travel to an exponential frequency sweep
@@ -233,6 +240,10 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         juce::Colour accent() const;   /* base (unassigned) highlight colour */
         void assign_mirrors(Modulation::Type const type, int const slot);
         void clear_mirrors();
+        /* Inverse (crossfade) mirrors: parallel complement-range macros. */
+        void assign_inverse_mirrors(Synth::ControllerId const source, double const base);
+        void clear_inverse_mirrors();
+        void sync_inverse_mirrors(double const primary_min, double const primary_max);
         void read_base_depth();
         void apply_base(double const b);
         void apply_depth(double const d);
@@ -260,6 +271,7 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         int mod_caps;
         std::vector<Synth::ParamId> mirrors;
         std::vector<Synth::ParamId> value_mirrors;
+        std::vector<Synth::ParamId> inverse_mirrors;
         juce::StringArray discrete_labels;
 
         Style style;

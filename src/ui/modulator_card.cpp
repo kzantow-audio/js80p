@@ -332,7 +332,7 @@ void ModulatorCard::resized()
 
     /* Time / level inaccuracy dots in the reserved far-right header band. */
     if (tin_dot != nullptr && vin_dot != nullptr) {
-        int const sz = 12;
+        int const sz = 16;
         int const gap = 5;
         int const right = getWidth() - 6;
         int const y = 11 - sz / 2;   /* centre on the header line (y 3..19) */

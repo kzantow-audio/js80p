@@ -41,6 +41,9 @@ static constexpr float BADGE_H = 12.0f;   /* modulation badge / slider handle si
  * strips): macro cells reserve no strips, so their dial is capped to this to read
  * at the same size as an oscillator knob. */
 static constexpr int OSC_DIAL_BOX = 40;
+/* Every pie DOT renders at the same size (the inaccuracy dots'), no matter how
+ * big a cell it is given (e.g. the captioned MIX pie in an effect header). */
+static constexpr float DOT_BOX = 16.0f;
 
 /* Global sources assignable through an intermediate macro (label + ControllerId). */
 static struct { char const* name; int id; } const CONTROL_SOURCES[] = {
@@ -209,6 +212,7 @@ void Control::set_manager(ModulationManager* const m) { manager = m; }
 void Control::set_mod_caps(int const c) { mod_caps = c; }
 void Control::set_mirrors(std::vector<Synth::ParamId> m) { mirrors = std::move(m); }
 void Control::set_value_mirrors(std::vector<Synth::ParamId> m) { value_mirrors = std::move(m); }
+void Control::set_inverse_mirrors(std::vector<Synth::ParamId> m) { inverse_mirrors = std::move(m); }
 void Control::set_discrete_labels(juce::StringArray labels) { discrete_labels = std::move(labels); }
 void Control::set_semitone_snap(bool const on) { semitone_snap = on; }
 void Control::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0, r); }
@@ -307,6 +311,50 @@ void Control::clear_mirrors()
 {
     for (Synth::ParamId const m : mirrors) {
         bridge.assign_controller(m, Synth::ControllerId::NONE);
+    }
+}
+
+
+void Control::assign_inverse_mirrors(Synth::ControllerId const source, double const base)
+{
+    /* Each inverse mirror gets its own parallel macro fed by the same source; the
+     * complement range is then written by sync_inverse_mirrors. */
+    if (manager == nullptr) {
+        return;
+    }
+
+    for (Synth::ParamId const inv : inverse_mirrors) {
+        manager->assign_source(inv, source, base);
+    }
+
+    sync_inverse_mirrors(base, juce::jlimit(0.0, 1.0, base + 0.5));
+}
+
+
+void Control::clear_inverse_mirrors()
+{
+    if (manager == nullptr) {
+        return;
+    }
+
+    for (Synth::ParamId const inv : inverse_mirrors) {
+        manager->unassign(inv);
+    }
+}
+
+
+void Control::sync_inverse_mirrors(double const primary_min, double const primary_max)
+{
+    /* Mirror each inverse destination's macro range to the complement of the
+     * primary's, so the source drives it the opposite way (a crossfade). */
+    for (Synth::ParamId const inv : inverse_mirrors) {
+        Modulation::Type t;
+        int slot;
+
+        if (Modulation::decode(bridge.controller(inv), t, slot) && t == Modulation::MACRO) {
+            bridge.set_ratio(Modulation::macro_min(slot), juce::jlimit(0.0, 1.0, 1.0 - primary_min));
+            bridge.set_ratio(Modulation::macro_max(slot), juce::jlimit(0.0, 1.0, 1.0 - primary_max));
+        }
     }
 }
 
@@ -692,7 +740,12 @@ void Control::apply_base(double const b)
     }
 
     double const target = juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth);
-    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), visual_to_ratio(target));
+    double const target_ratio = visual_to_ratio(target);
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), target_ratio);
+
+    if (!inverse_mirrors.empty()) {
+        sync_inverse_mirrors(base, target_ratio);
+    }
     repaint();
 }
 
@@ -701,7 +754,12 @@ void Control::apply_depth(double const d)
 {
     depth = juce::jlimit(-1.0, 1.0, d);
     double const target = juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth);
-    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), visual_to_ratio(target));
+    double const target_ratio = visual_to_ratio(target);
+    bridge.set_ratio(Modulation::depth_param(mod_type, mod_slot), target_ratio);
+
+    if (!inverse_mirrors.empty()) {
+        sync_inverse_mirrors(base, target_ratio);
+    }
     repaint();
 }
 
@@ -843,14 +901,18 @@ juce::Rectangle<int> Control::value_strip() const
 juce::Rectangle<float> Control::knob_circle() const
 {
     if (style == Style::DOT) {
-        /* A dot fills its (tiny) cell: no reserved strips, minimal inset. */
+        /* A capped small pie. With a caption it is left-aligned right after the
+         * gutter (so a badge fits to its right); otherwise centred in its cell. */
         juce::Rectangle<int> b = getLocalBounds();
-        if (label_pos == LabelPos::LEFT) {
-            b.removeFromLeft(LEFT_GUTTER);
-        } else if (label_pos == LabelPos::TOP) {
+        if (label_pos == LabelPos::TOP) {
             b.removeFromTop(STRIP);
         }
-        float const s = (float)juce::jmin(b.getWidth(), b.getHeight());
+        if (label_pos == LabelPos::LEFT) {
+            b.removeFromLeft(LEFT_GUTTER);
+            float const s = juce::jmin((float)b.getWidth(), (float)b.getHeight(), DOT_BOX);
+            return juce::Rectangle<float>((float)b.getX(), b.getCentreY() - s * 0.5f, s, s).reduced(1.0f);
+        }
+        float const s = juce::jmin((float)juce::jmin(b.getWidth(), b.getHeight()), DOT_BOX);
         return b.toFloat().withSizeKeepingCentre(s, s).reduced(1.0f);
     }
 
@@ -921,9 +983,15 @@ juce::Rectangle<float> Control::badge_rect() const
         return juce::Rectangle<float>(t.getCentreX() - w * 0.5f, t.getY(), w, h);
     }
 
-    /* ROTARY / DOT: lower-left corner sits on the reach ring at the top-right
-     * (45 deg), so the badge meets the modulation-amount curve regardless of
-     * cell width. */
+    if (style == Style::DOT) {
+        /* Directly to the right of the pie, vertically centred on it (header
+         * pies read as one horizontal "MIX o [box]" row). */
+        juce::Rectangle<float> const kb = knob_circle();
+        return juce::Rectangle<float>(kb.getRight() + 4.0f, kb.getCentreY() - h * 0.5f, w, h);
+    }
+
+    /* ROTARY: lower-left corner sits on the reach ring at the top-right (45 deg),
+     * so the badge meets the modulation-amount curve regardless of cell width. */
     juce::Rectangle<float> const kb = knob_circle();
     float const rr = kb.getWidth() * 0.5f + 3.0f;
     float const dx = std::sqrt(juce::jmax(0.0f, h * (2.0f * rr - h)));
@@ -1249,10 +1317,12 @@ void Control::open_assign_menu()
             double const b = self->bridge.get_ratio(self->param_id);
             Modulation::Type type = Modulation::ENVELOPE;
             int slot = 0;
+            Synth::ControllerId inverse_source = Synth::ControllerId::NONE;
 
             if (result == 4) {
                 self->manager->unassign(self->param_id);
                 self->clear_mirrors();
+                self->clear_inverse_mirrors();
                 self->update_assignment();
                 return;
             }
@@ -1288,15 +1358,19 @@ void Control::open_assign_menu()
                 slot = self->manager->assign(self->param_id, gp.first, b, gp.second);
             } else if (result >= 200 && result - 200 < CONTROL_SOURCE_COUNT) {
                 type = Modulation::MACRO;
-                slot = self->manager->assign_source(
-                    self->param_id, (Synth::ControllerId)CONTROL_SOURCES[result - 200].id, b
-                );
+                inverse_source = (Synth::ControllerId)CONTROL_SOURCES[result - 200].id;
+                slot = self->manager->assign_source(self->param_id, inverse_source, b);
             } else if (result == 300) {
                 type = Modulation::MACRO;
                 slot = self->manager->assign_random(self->param_id, b);
             }
 
             self->assign_mirrors(type, slot);
+            /* A source-fed assignment also drives any inverse (crossfade) mirrors
+             * from the same source through complement-range macros. */
+            if (slot != 0 && inverse_source != Synth::ControllerId::NONE) {
+                self->assign_inverse_mirrors(inverse_source, b);
+            }
             self->update_assignment();
         }
     );
@@ -1308,6 +1382,13 @@ void Control::open_assign_menu()
 bool Control::hitTest(int x, int y)
 {
     juce::Point<float> const p((float)x, (float)y);
+
+    /* The caption drags the value too, so grabbing a header knob by its label
+     * feels the same as grabbing its dial. */
+    if (label_pos != LabelPos::NONE && !label.isEmpty()
+            && label_strip().toFloat().contains(p)) {
+        return true;
+    }
 
     if (is_slider()) {
         return track_rect().expanded(RING_BAND * 0.5f).contains(p)

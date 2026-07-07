@@ -73,8 +73,6 @@ class NewGui : public juce::Component, private juce::Timer
 
         Knob& add_knob(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
         Control* add_dot(Synth::ParamId const id, char const* const title, char const* const tooltip);
-        /* A header WET/DRY MIX knob for one effect (chorus / echo / reverb). */
-        Control* add_header_mix(Synth::ParamId const wet, Synth::ParamId const dry, char const* const title);
         WaveformSelector* add_wave(Synth::ParamId const id);
         Selector* add_selector(Synth::ParamId const id, juce::StringArray options, juce::String caption);
         FilterPanel* add_filters(
@@ -110,9 +108,6 @@ class NewGui : public juce::Component, private juce::Timer
          * tabs with its OUT caption drawn to the left (no value readout). */
         std::unique_ptr<Knob> out_knob;
         juce::Rectangle<int> out_label_bounds;
-        /* Per-effect WET/DRY MIX knobs, moved out of the effect panels into the
-         * header (chorus, echo, reverb), each with its caption to the left. */
-        juce::OwnedArray<Control> header_mixes;
         ModulationManager manager;
         MacroStrip macro_strip;
         EffectsPage effects_page;

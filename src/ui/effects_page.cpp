@@ -85,8 +85,10 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     /* Row 1 - CHORUS (left) and TAPE (right) share a single row. WIDTH is a
      * large knob kept in its natural place, right after the TYPE selector. */
     int const chorus = begin_panel("CHORUS", 1);
+    add_mix(chorus, P::ECWET, P::ECDRY);   /* MIX pie in the panel header */
+    add_medium(chorus, { { P::ECTYP, "TYPE" } });
     add_large(chorus, { { P::ECFRQ, "FREQ" }, { P::ECDPT, "DEPTH" } });
-    add_medium(chorus, { { P::ECDEL, "DELAY" }, { P::ECFB, "FB" }, { P::ECTYP, "TYPE" } });
+    add_medium(chorus, { { P::ECDEL, "DELAY" }, { P::ECFB, "FB" } });
     add_large(chorus, { { P::ECWID, "WIDTH" } });
     add_medium(chorus, {
         { P::ECDF, "DAMP F" }, { P::ECDG, "DAMP G" },
@@ -109,8 +111,10 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     /* Row 2 - ECHO. REV 1 / REV 2 / SC MODE move to title buttons. WIDTH is a
      * large knob kept right after DIST. */
     int const echo = begin_panel("ECHO", 2);
+    add_mix(echo, P::EEWET, P::EEDRY);   /* MIX pie in the panel header */
+    add_medium(echo, { { P::EEINV, "IN" } });
     add_large(echo, { { P::EEDEL, "DELAY" }, { P::EEFB, "FB" } });
-    add_medium(echo, { { P::EEINV, "IN" }, { P::EEDST, "DIST" } });
+    add_medium(echo, { { P::EEDST, "DIST" } });
     add_large(echo, { { P::EEWID, "WIDTH" } });
     add_medium(echo, {
         { P::EEDF, "DAMP F" }, { P::EEDG, "DAMP G" },
@@ -128,8 +132,10 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
 
     /* Row 3 - REVERB. WIDTH is a large knob kept right after DIST. */
     int const reverb = begin_panel("REVERB", 3);
+    add_mix(reverb, P::ERWET, P::ERDRY);   /* MIX pie in the panel header */
+    add_medium(reverb, { { P::ERTYP, "TYPE" } });
     add_large(reverb, { { P::ERRS, "SIZE" }, { P::ERRR, "REFL" } });
-    add_medium(reverb, { { P::ERTYP, "TYPE" }, { P::ERDST, "DIST" } });
+    add_medium(reverb, { { P::ERDST, "DIST" } });
     add_large(reverb, { { P::ERWID, "WIDTH" } });
     add_medium(reverb, {
         { P::ERDF, "DAMP F" }, { P::ERDG, "DAMP G" },
@@ -256,15 +262,23 @@ void EffectsPage::add_mix(
         return juce::String(wet_pct) + "/" + juce::String(dry_pct);
     };
 
-    Control* const mix = new Control(bridge, wet, "MIX");
+    /* The MIX sits in the panel's title bar (right-aligned), drawn as the small
+     * pie-style control used elsewhere in panel headers, captioned "MIX". */
+    Control* const mix = new Control(bridge, wet, "MIX", Control::Style::DOT, Control::Size::TINY);
     mix->set_value_hooks(read_mix, write_mix, format_mix);
     mix->set_hook_default(0.5);
+    mix->set_label_placement(Control::LabelPos::LEFT);
+    mix->set_value_display(Control::ValueDisplay::POPOVER);
+    /* A macro-modulation destination on the effect's WET amount, with the empty
+     * modulation box always shown (like the other header knobs). A modulator
+     * crossfades: it sweeps WET up while DRY is driven inversely (down). */
+    mix->set_manager(&manager);
+    mix->set_mod_caps(Modulation::CAP_MACRO);
+    mix->set_source_placeholder(true);
+    mix->set_inverse_mirrors({ dry });
     mix_knobs.add(mix);
     content.addAndMakeVisible(mix);
-
-    Cell cell;
-    cell.mix = mix;
-    panels[(size_t)panel].cells.push_back(cell);
+    panels[(size_t)panel].header_mix = mix;
 }
 
 
@@ -372,9 +386,19 @@ void EffectsPage::place_panel(Panel& panel)
         }
     }
 
-    /* Title-bar buttons, right-aligned and laid out left-to-right in order. */
     int bx = panel.bounds.getRight() - PANEL_PAD;
 
+    /* Title-bar MIX pie, pinned to the panel's right edge: caption + pie + its
+     * (empty) modulation box, which overhangs to the pie's right. */
+    if (panel.header_mix != nullptr) {
+        int const mw = 68;
+        int const mh = 18;
+        bx -= mw;
+        panel.header_mix->setBounds(bx, panel.bounds.getY() + 14 - mh / 2, mw, mh);
+        bx -= 6;
+    }
+
+    /* Title-bar buttons, right-aligned and laid out left-to-right in order. */
     for (int i = (int)panel.buttons.size() - 1; i >= 0; --i) {
         int const bw = panel.buttons[(size_t)i]->preferred_width();
         bx -= bw;
