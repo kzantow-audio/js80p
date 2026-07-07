@@ -33,24 +33,30 @@ JS80PEditor::JS80PEditor(JS80PProcessor& processor)
 
     juce::ComponentBoundsConstrainer* const constrainer = getConstrainer();
 
+    /* The new GUI no longer reserves a blank value strip under each knob, so its
+     * content is shorter than the legacy WIDTH:HEIGHT ratio. Lock the window to a
+     * design height trimmed by 53 px (~28 px at the default scale below) so the
+     * plugin is that much shorter at the same width. */
+    int const design_width = JS80P::GUI::WIDTH;
+    int const design_height = JS80P::GUI::HEIGHT - 53;
+
     if (constrainer != nullptr) {
         constrainer->setFixedAspectRatio(
-            (double)JS80P::GUI::WIDTH / (double)JS80P::GUI::HEIGHT
+            (double)design_width / (double)design_height
         );
         constrainer->setSizeLimits(
-            JS80P::GUI::WIDTH / 4,
-            JS80P::GUI::HEIGHT / 4,
-            JS80P::GUI::WIDTH,
-            JS80P::GUI::HEIGHT
+            design_width / 4,
+            design_height / 4,
+            design_width,
+            design_height
         );
     }
 
     /* Larger default than the legacy INIT_SCALE (0.48) so the new GUI's
      * per-oscillator pulse-width / harmonics section is visible without
-     * resizing. Aspect ratio stays locked to the original layout, so the scale
-     * (0.527) is chosen to trim ~40px of height off the previous 0.56 default
-     * now that the filter section and harmonics are more compact. */
-    setSize((int)(0.527 * JS80P::GUI::WIDTH_FLOAT), (int)(0.527 * JS80P::GUI::HEIGHT_FLOAT));
+     * resizing. The scale (0.527) keeps the same width as before; the trimmed
+     * design height above makes the window ~28px shorter. */
+    setSize((int)(0.527 * (double)design_width), (int)(0.527 * (double)design_height));
 
     /* Original GUI (JUCE Widget backend). Its root is reparented into matrix_host
      * so the new GUI can embed it, contained, under its MATRIX tab. */

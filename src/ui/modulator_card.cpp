@@ -73,7 +73,7 @@ ModulatorCard::ModulatorCard(
         for (Knob* const k : knobs) {
             k->set_manager(&manager);
             k->set_mod_caps(Modulation::CAP_MACRO);   /* envelope params: macros only */
-            k->set_center_value(1.0);   /* time knobs: exponential, 1 second midpoint */
+            k->set_center_value(1.5);   /* time knobs: exponential, 1.5 second midpoint */
             /* No reserved value strip: the value shows in the hover/drag popover,
              * so the blank strip below each dial is reclaimed and the card is that
              * much shorter (see preferred_height / resized). */

@@ -873,6 +873,13 @@ juce::String Control::format_ratio(double const r) const
 
 /* ---- Geometry ---- */
 
+juce::Point<int> Control::control_centre() const
+{
+    juce::Rectangle<float> const r = is_slider() ? track_rect() : knob_circle();
+    return r.getCentre().roundToInt();
+}
+
+
 juce::Rectangle<int> Control::body_bounds() const
 {
     juce::Rectangle<int> b = getLocalBounds().reduced(2);
@@ -883,10 +890,10 @@ juce::Rectangle<int> Control::body_bounds() const
         b.removeFromTop(STRIP);
     }
 
-    if (value_display == ValueDisplay::ALWAYS) {
-        b.removeFromBottom(STRIP);
-    }
-
+    /* The value readout is never painted inline any more (it lives in the hover /
+     * drag popover), so no bottom strip is reserved: the dial / track fills the
+     * body right down to the cell's bottom edge. Cell heights were trimmed to
+     * match, keeping the dial the same size and position under its caption. */
     return b;
 }
 

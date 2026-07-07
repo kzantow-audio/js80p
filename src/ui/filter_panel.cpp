@@ -109,8 +109,8 @@ void FilterPanel::resized()
      * type selector is shorter than the knobs and top-aligned with them, so the
      * whole section stays compact. */
     juce::Rectangle<int> const row = b;
-    int const freq_h = 76;
-    int const small_h = 70;
+    int const freq_h = 62;   /* -14: no reserved bottom value strip */
+    int const small_h = 56;
     int const bottom = row.getBottom();
 
     int const type_w = 66;

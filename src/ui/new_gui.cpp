@@ -462,31 +462,55 @@ void NewGui::init_patch()
     manager.reserve_group(Modulation::ENVELOPE, { 1, 2 });
     manager.reserve_group(Modulation::ENVELOPE, { 3, 4 });
 
+    /* Uniform envelope times on every envelope: 0.001 s attack, 0 hold, 1 s
+     * decay, 0.1 s release. Only the level shape (base / peak / sustain) differs
+     * between the AMP and filter groups. */
     auto setup_env = [this](
-            int const slot, double const base, double const peak,
-            double const sus, double const dec_s, double const rel_s) {
+            int const slot, double const base, double const peak, double const sus) {
         bridge.set_ratio(Modulation::env_ini(slot), base);
         bridge.set_ratio(Modulation::env_fin(slot), base);
         bridge.set_ratio(Modulation::env_pk(slot), peak);
         bridge.set_ratio(Modulation::env_sus(slot), sus);
+        bridge.set_ratio(Modulation::env_atk(slot), bridge.ratio_for_display(Modulation::env_atk(slot), 0.001));
         bridge.set_ratio(Modulation::env_hld(slot), 0.0);
-        bridge.set_ratio(Modulation::env_dec(slot), bridge.ratio_for_display(Modulation::env_dec(slot), dec_s));
-        bridge.set_ratio(Modulation::env_rel(slot), bridge.ratio_for_display(Modulation::env_rel(slot), rel_s));
+        bridge.set_ratio(Modulation::env_dec(slot), bridge.ratio_for_display(Modulation::env_dec(slot), 1.0));
+        bridge.set_ratio(Modulation::env_rel(slot), bridge.ratio_for_display(Modulation::env_rel(slot), 0.1));
     };
 
-    /* 5a. AMP: level 0, full-range modulation; hold 0, 100% sustain, 1.5 s
-     * decay/release (env 1 -> Osc 1 AMP, copy to Osc 2). */
-    setup_env(1, 0.0, 1.0, 1.0, 1.5, 1.5);
-    setup_env(2, 0.0, 1.0, 1.0, 1.5, 1.5);
+    /* 5a. AMP: level 0, full-range modulation; 100% sustain (env 1 -> Osc 1 AMP,
+     * env 2 -> Osc 2 AMP). */
+    setup_env(1, 0.0, 1.0, 1.0);
+    setup_env(2, 0.0, 1.0, 1.0);
     bridge.assign_controller(Synth::ParamId::MAMP, Modulation::controller_id(Modulation::ENVELOPE, 1));
     bridge.assign_controller(Synth::ParamId::CAMP, Modulation::controller_id(Modulation::ENVELOPE, 2));
 
-    /* 5b. Filter cutoff (Filter 1 = MF1, Filter 3 = CF1): mid base, sweep up to
-     * max; hold 0, 0% sustain, 1 s decay/release. */
-    setup_env(3, 0.5, 1.0, 0.5, 1.0, 1.0);
-    setup_env(4, 0.5, 1.0, 0.5, 1.0, 1.0);
+    /* 5b. Filter cutoff (Filter 1 = MF1, Filter 3 = CF1): 1 kHz base sweeping up
+     * to 20 kHz at the envelope peak; 50% sustain. */
+    setup_env(
+        3,
+        bridge.ratio_for_display(Synth::ParamId::MF1FRQ, 1000.0),
+        bridge.ratio_for_display(Synth::ParamId::MF1FRQ, 20000.0),
+        0.5
+    );
+    setup_env(
+        4,
+        bridge.ratio_for_display(Synth::ParamId::CF1FRQ, 1000.0),
+        bridge.ratio_for_display(Synth::ParamId::CF1FRQ, 20000.0),
+        0.5
+    );
     bridge.assign_controller(Synth::ParamId::MF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 3));
     bridge.assign_controller(Synth::ParamId::CF1FRQ, Modulation::controller_id(Modulation::ENVELOPE, 4));
+
+    /* 6. Guarantee one readily-automatable performance macro: if the user never
+     * configured M1's input, default it to the modulation wheel with a full
+     * 0..100% range, so there is always a mod-wheel macro to automate. */
+    if (bridge.controller(Modulation::macro_in(1)) == Synth::ControllerId::NONE) {
+        bridge.assign_controller(
+            Modulation::macro_in(1), Synth::ControllerId::MODULATION_WHEEL
+        );
+        bridge.set_ratio(Modulation::macro_min(1), 0.0);
+        bridge.set_ratio(Modulation::macro_max(1), 1.0);
+    }
 }
 
 
@@ -810,7 +834,7 @@ void NewGui::resized()
     effects_page.setBounds(body_bounds);
 
     int const gap = 5;
-    int const filter_height = 116;
+    int const filter_height = 102;   /* -14: filter knobs no longer reserve a bottom value strip */
 
     int const mod_width = juce::jmax(220, area.getWidth() / 3);
     mod_bounds = area.removeFromRight(mod_width);
@@ -884,7 +908,7 @@ void NewGui::lay_out_osc(
 
     int const columns = 4;
     int const cell_w = inner.getWidth() / columns;
-    int const cell_h = 72;
+    int const cell_h = 58;   /* dial (40px) + caption strip; no bottom value strip */
 
     for (int i = 0; i != (int)main.size(); ++i) {
         main[(size_t)i]->setBounds(
@@ -934,7 +958,7 @@ void NewGui::lay_out_mix(
     /* A little top padding so the MIX knob isn't cramped against the top. */
     inner.removeFromTop(10);
 
-    int const cell_h = 72;
+    int const cell_h = 58;   /* dial (40px) + caption strip; no bottom value strip */
 
     for (int i = 0; i != (int)knobs_.size(); ++i) {
         knobs_[(size_t)i]->setBounds(
@@ -1065,12 +1089,14 @@ void NewGui::paint(juce::Graphics& g)
 
     /* Signal-flow hint: two small right-pointing triangles in the mix column,
      * one hugging OSC 1 (flow into the mix knobs) and one hugging OSC 2 (flow
-     * out to the carrier). Sat a quarter of the way down the column (rather than
-     * dead-centre) so they line up with the upper mix controls. */
+     * out to the carrier). Vertically centred on the MIX knob's dial (its circle,
+     * excluding the caption above it) so they line up with the topmost control. */
     {
         float const h = 8.0f;
         float const w = h * 0.62f;
-        float const cy = (float)mix_bounds.getY() + (float)mix_bounds.getHeight() / 4.0f;
+        float const cy = mix.empty()
+            ? (float)mix_bounds.getCentreY()
+            : (float)(mix[0]->getY() + mix[0]->control_centre().getY());
         auto arrow = [&g, h, w, cy](float const cx) {
             juce::Path tri;
             tri.startNewSubPath(cx - w * 0.5f, cy - h * 0.5f);

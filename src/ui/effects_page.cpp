@@ -32,9 +32,9 @@ namespace JS80P
  * same knob at ~4/5 the circle size, vertically centred so its circle lines up
  * with the large row. */
 static constexpr int LARGE_W = 56;
-static constexpr int KNOB_H  = 72;
+static constexpr int KNOB_H  = 58;   /* -14: no reserved bottom value strip */
 static constexpr int MED_W   = 48;
-static constexpr int MED_H   = 65;
+static constexpr int MED_H   = 51;   /* -14: matches KNOB_H, medium circle stays aligned */
 static constexpr int TITLE_H = 22;
 static constexpr int PANEL_PAD = 8;
 static constexpr int PANEL_GAP = 6;
