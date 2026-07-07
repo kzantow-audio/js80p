@@ -30,13 +30,11 @@
 #include "synth.hpp"
 
 #include "ui/curve_selector.hpp"
-#include "ui/dot_control.hpp"
-#include "ui/env_scale_slider.hpp"
+#include "ui/control.hpp"
 #include "ui/knob.hpp"
 #include "ui/modulation.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
-#include "ui/vfader.hpp"
 #include "ui/waveform_selector.hpp"
 
 
@@ -102,10 +100,10 @@ class ModulatorCard : public juce::Component
 
         juce::OwnedArray<Knob> knobs;        /* env D/A/H/D/R or LFO rate/phase/... */
         juce::OwnedArray<CurveSelector> curves;   /* env attack/decay/release shapes */
-        std::unique_ptr<VFader> sus_fader;   /* env sustain fraction (min..max) */
-        std::unique_ptr<EnvScaleSlider> env_scale;   /* env SCL, in the header row */
-        std::unique_ptr<DotControl> tin_dot;   /* env time inaccuracy, header far-right */
-        std::unique_ptr<DotControl> vin_dot;   /* env level inaccuracy, header far-right */
+        std::unique_ptr<Control> sus_fader;   /* env sustain fraction (V_SLIDER) */
+        std::unique_ptr<Control> env_scale;   /* env SCL (H_SLIDER, header row) */
+        std::unique_ptr<Control> tin_dot;   /* env time inaccuracy, header far-right */
+        std::unique_ptr<Control> vin_dot;   /* env level inaccuracy, header far-right */
         double sus_fraction;
         std::unique_ptr<WaveformSelector> wave;        /* LFO shape button */
         std::unique_ptr<WaveformSelector> shape_grid;  /* LFO shape picker */

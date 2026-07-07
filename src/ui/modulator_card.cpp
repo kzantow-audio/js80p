@@ -97,24 +97,62 @@ ModulatorCard::ModulatorCard(
             ? juce::jlimit(0.0, 1.0, (bridge.get_ratio(Modulation::env_sus(rep)) - ini) / (pk - ini))
             : 0.0;
 
-        sus_fader = std::make_unique<VFader>("SUS");
-        sus_fader->set_value(sus_fraction);
-        sus_fader->on_change = [this](double const v) { sus_fraction = v; write_sustain(); };
+        double const def_ini = bridge.get_default_ratio(Modulation::env_ini(rep));
+        double const def_pk = bridge.get_default_ratio(Modulation::env_pk(rep));
+        double const def_sus = bridge.get_default_ratio(Modulation::env_sus(rep));
+        double const def_fraction = (def_pk - def_ini) > 1.0e-6
+            ? juce::jlimit(0.0, 1.0, (def_sus - def_ini) / (def_pk - def_ini)) : 1.0;
+
+        sus_fader = std::make_unique<Control>(
+            bridge, Modulation::env_sus(rep), "SUS",
+            Control::Style::V_SLIDER, Control::Size::NORMAL
+        );
+        sus_fader->set_value_hooks(
+            [this]() { return sus_fraction; },
+            [this](double const v) { sus_fraction = v; write_sustain(); },
+            [](double const v) { return juce::String(v, 2); }
+        );
+        sus_fader->set_hook_default(def_fraction);
         addAndMakeVisible(*sus_fader);
 
-        /* SCL lives in the middle of the header row (not among the knobs). */
-        env_scale = std::make_unique<EnvScaleSlider>(bridge, manager, rep, members);
+        /* SCL lives in the middle of the header row (not among the knobs): a
+         * horizontal slider that is a macro-only modulation destination, its
+         * value/modulation mirrored onto every grouped member's SCL. */
+        std::vector<Synth::ParamId> scl_mirrors;
+        for (int const m : members) {
+            if (m != rep) {
+                scl_mirrors.push_back(Modulation::env_scl(m));
+            }
+        }
+
+        env_scale = std::make_unique<Control>(
+            bridge, Modulation::env_scl(rep), "SCL",
+            Control::Style::H_SLIDER, Control::Size::SMALL
+        );
+        env_scale->set_manager(&manager);
+        env_scale->set_mod_caps(Modulation::CAP_MACRO);
+        env_scale->set_label_placement(Control::LabelPos::LEFT);
+        env_scale->set_value_display(Control::ValueDisplay::POPOVER);
+        env_scale->set_source_placeholder(true);
+        env_scale->set_mirrors(scl_mirrors);
+        env_scale->set_value_mirrors(scl_mirrors);
         addAndMakeVisible(*env_scale);
 
         /* Two tiny pie dots in the header's far-right band: time inaccuracy and
          * level inaccuracy, mirrored onto every grouped member. */
-        tin_dot = std::make_unique<DotControl>(bridge, Modulation::env_tin(rep));
-        tin_dot->set_mirrors(mirror(Modulation::env_tin));
+        tin_dot = std::make_unique<Control>(
+            bridge, Modulation::env_tin(rep), juce::String(),
+            Control::Style::DOT, Control::Size::TINY
+        );
+        tin_dot->set_value_mirrors(mirror(Modulation::env_tin));
         tin_dot->setTooltip("Envelope time inaccuracy");
         addAndMakeVisible(*tin_dot);
 
-        vin_dot = std::make_unique<DotControl>(bridge, Modulation::env_vin(rep));
-        vin_dot->set_mirrors(mirror(Modulation::env_vin));
+        vin_dot = std::make_unique<Control>(
+            bridge, Modulation::env_vin(rep), juce::String(),
+            Control::Style::DOT, Control::Size::TINY
+        );
+        vin_dot->set_value_mirrors(mirror(Modulation::env_vin));
         vin_dot->setTooltip("Envelope level inaccuracy");
         addAndMakeVisible(*vin_dot);
     } else if (type == Modulation::LFO) {
@@ -230,6 +268,7 @@ void ModulatorCard::refresh()
 {
     if (sus_fader != nullptr) {
         write_sustain();   /* keep SUS tracking the fraction as min/max change */
+        sus_fader->refresh();
     }
 
     if (env_scale != nullptr) {

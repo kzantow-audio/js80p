@@ -29,7 +29,7 @@
 
 #include "ui/knob.hpp"
 #include "ui/mini_button.hpp"
-#include "ui/mix_knob.hpp"
+#include "ui/control.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/param_bridge.hpp"
 
@@ -42,7 +42,7 @@ namespace JS80P
  *        chain (input/output volumes, two distortions, two filters, tape,
  *        chorus, echo, reverb) as boxes of controls in three visual tiers:
  *        large Knobs for the primary controls, ~2/3-size medium Knobs for the
- *        related secondary controls next to them, and tiny DotControl pie-dots
+ *        related secondary controls next to them, and tiny Control DOT pie-dots
  *        (clustered, right of each panel) for infrequently used trims. Discrete
  *        "type"/mode params are shown as knobs that step through the options;
  *        the old logarithmic-scale toggles are intentionally omitted. Scrolls
@@ -72,7 +72,7 @@ class EffectsPage : public juce::Component
         struct Cell
         {
             Knob* knob = nullptr;    /* large or medium knob */
-            MixKnob* mix = nullptr;  /* combined WET/DRY cell (large) */
+            Control* mix = nullptr;  /* combined WET/DRY cell (large) */
             bool medium = false;     /* ~4/5-size related control */
             Synth::ParamId id = Synth::ParamId::PARAM_ID_COUNT;   /* knob's param */
         };
@@ -133,7 +133,7 @@ class EffectsPage : public juce::Component
         Content content;
         juce::Viewport viewport;
         juce::OwnedArray<Knob> knobs;
-        juce::OwnedArray<MixKnob> mix_knobs;
+        juce::OwnedArray<Control> mix_knobs;
         juce::OwnedArray<MiniButton> buttons;
         std::vector<Panel> panels;
 

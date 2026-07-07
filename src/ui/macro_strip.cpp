@@ -16,8 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <memory>
+#include <vector>
+
 #include "ui/macro_strip.hpp"
 
+#include "ui/curve_selector.hpp"
+#include "ui/modulation.hpp"
 #include "ui/theme.hpp"
 
 
@@ -29,7 +34,21 @@ MacroStrip::MacroStrip(ParamBridge& bridge)
     setWantsKeyboardFocus(false);
 
     for (int m = 1; m <= COUNT; ++m) {
-        MacroCell* const cell = new MacroCell(bridge, m);
+        /* The macro rotary edits its MIN (base) / MAX (depth) directly; the
+         * badge picks the input source and only then does it read as modulated.
+         * A distortion-curve square sits at the dial's bottom-right. */
+        Control* const cell = new Control(
+            bridge, Modulation::macro_min(m), "M" + juce::String(m),
+            Control::Style::ROTARY, Control::Size::SMALL
+        );
+        cell->set_macro(m);
+        cell->set_label_placement(Control::LabelPos::LEFT);
+        cell->set_value_display(Control::ValueDisplay::POPOVER);
+        auto curve = std::make_unique<CurveSelector>(
+            bridge, std::vector<Synth::ParamId>{ Modulation::macro_dcv(m) }, false, true
+        );
+        CurveSelector* const curve_ptr = curve.get();
+        cell->set_sub_control(std::move(curve), [curve_ptr]() { curve_ptr->refresh(); });
         cells.add(cell);
         addAndMakeVisible(cell);
     }
@@ -38,7 +57,7 @@ MacroStrip::MacroStrip(ParamBridge& bridge)
 
 void MacroStrip::refresh()
 {
-    for (MacroCell* const cell : cells) {
+    for (Control* const cell : cells) {
         cell->refresh();
     }
 }

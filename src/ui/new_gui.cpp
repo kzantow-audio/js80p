@@ -199,9 +199,11 @@ Knob& NewGui::add_knob(
 }
 
 
-DotControl* NewGui::add_dot(Synth::ParamId const id, char const* const tooltip)
+Control* NewGui::add_dot(Synth::ParamId const id, char const* const tooltip)
 {
-    DotControl* const dot = new DotControl(bridge, id);
+    Control* const dot = new Control(
+        bridge, id, juce::String(), Control::Style::DOT, Control::Size::TINY
+    );
     dot->setTooltip(tooltip);
     dots.add(dot);
     addAndMakeVisible(dot);
@@ -278,7 +280,7 @@ void NewGui::timerCallback()
     for (Knob* const knob : knobs) {
         knob->refresh();
     }
-    for (DotControl* const dot : dots) {
+    for (Control* const dot : dots) {
         dot->refresh();
     }
     for (WaveformSelector* const wave : waves) {
@@ -314,7 +316,7 @@ void NewGui::set_synth_visible(bool const visible)
     for (Knob* const knob : knobs) {
         knob->setVisible(visible);
     }
-    for (DotControl* const dot : dots) {
+    for (Control* const dot : dots) {
         dot->setVisible(visible);
     }
     for (WaveformSelector* const wave : waves) {
@@ -532,7 +534,7 @@ void NewGui::resized()
     /* Two tiny pie dots right-aligned in each oscillator's title row,
      * vertically centred on the 13px title text (see draw_section_title). */
     auto place_dots = [](
-            juce::Rectangle<int> const& panel, DotControl* const a, DotControl* const b) {
+            juce::Rectangle<int> const& panel, Control* const a, Control* const b) {
         int const sz = 12;
         int const gap = 5;
         int const right = panel.getRight() - 10;

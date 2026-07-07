@@ -28,7 +28,7 @@
 
 #include <string>
 
-#include "ui/dot_control.hpp"
+#include "ui/control.hpp"
 #include "ui/effects_page.hpp"
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
@@ -72,7 +72,7 @@ class NewGui : public juce::Component, private juce::Timer
         void paint_tabs(juce::Graphics& g);
 
         Knob& add_knob(std::vector<Knob*>& column, Synth::ParamId const id, char const* const label);
-        DotControl* add_dot(Synth::ParamId const id, char const* const tooltip);
+        Control* add_dot(Synth::ParamId const id, char const* const tooltip);
         WaveformSelector* add_wave(Synth::ParamId const id);
         Selector* add_selector(Synth::ParamId const id, juce::StringArray options, juce::String caption);
         FilterPanel* add_filters(
@@ -119,7 +119,7 @@ class NewGui : public juce::Component, private juce::Timer
         juce::OwnedArray<ModulatorCard> cards;
         std::string card_sig;
         juce::OwnedArray<Knob> knobs;
-        juce::OwnedArray<DotControl> dots;
+        juce::OwnedArray<Control> dots;
         juce::OwnedArray<WaveformSelector> waves;
         juce::OwnedArray<Selector> selectors;
         juce::OwnedArray<FilterPanel> filters;
@@ -137,10 +137,10 @@ class NewGui : public juce::Component, private juce::Timer
 
         /* Tiny pie-fill dots at the top-right of each oscillator title:
          * inaccuracy + instability. */
-        DotControl* osc1_inacc;
-        DotControl* osc1_instab;
-        DotControl* osc2_inacc;
-        DotControl* osc2_instab;
+        Control* osc1_inacc;
+        Control* osc1_instab;
+        Control* osc2_inacc;
+        Control* osc2_instab;
 
         std::vector<Knob*> osc1;
         std::vector<Knob*> osc2;

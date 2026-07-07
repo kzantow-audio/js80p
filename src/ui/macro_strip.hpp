@@ -24,7 +24,7 @@
 #include "js80p.hpp"
 #include "synth.hpp"
 
-#include "ui/macro_cell.hpp"
+#include "ui/control.hpp"
 #include "ui/param_bridge.hpp"
 
 
@@ -32,9 +32,10 @@ namespace JS80P
 {
 
 /**
- * \brief The top performance strip: macros 1-8, each a MacroCell whose rotary is
- *        the macro's minimum output and whose source badge sets the maximum (the
- *        CC modulation range) and picks the MIDI input source. See doc/z-gui.md.
+ * \brief The top performance strip: macros 1-8, each a Control (macro mode) whose
+ *        rotary is the macro's minimum output and whose source badge sets the
+ *        maximum (the CC modulation range) and picks the MIDI input source. See
+ *        doc/z-gui.md.
  */
 class MacroStrip : public juce::Component
 {
@@ -49,7 +50,7 @@ class MacroStrip : public juce::Component
         void resized() override;
 
     private:
-        juce::OwnedArray<MacroCell> cells;
+        juce::OwnedArray<Control> cells;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroStrip)
 };

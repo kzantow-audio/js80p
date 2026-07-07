@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cmath>
+
 #include "ui/effects_page.hpp"
 
 #include "ui/modulation.hpp"
@@ -230,7 +232,31 @@ void EffectsPage::add_medium(
 void EffectsPage::add_mix(
         int const panel, Synth::ParamId const wet, Synth::ParamId const dry
 ) {
-    MixKnob* const mix = new MixKnob(bridge, wet, dry, "MIX");
+    /* One rotary folding an effect's WET and DRY volumes into a single MIX:
+     * mid-travel = both full; clockwise holds WET at 100% and fades DRY; counter-
+     * clockwise holds DRY at 100% and fades WET. Driven through value hooks so it
+     * inherits the standard drag / reset / typed-entry behaviour. */
+    ParamBridge* const bp = &bridge;
+
+    auto const read_mix = [bp, wet, dry]() -> double {
+        double const w = bp->get_ratio(wet);
+        double const d = bp->get_ratio(dry);
+        return w >= d ? juce::jlimit(0.5, 1.0, 1.0 - d * 0.5)
+                      : juce::jlimit(0.0, 0.5, w * 0.5);
+    };
+    auto const write_mix = [bp, wet, dry](double const m) {
+        bp->set_ratio(wet, juce::jmin(1.0, 2.0 * m));
+        bp->set_ratio(dry, juce::jmin(1.0, 2.0 * (1.0 - m)));
+    };
+    auto const format_mix = [](double const m) {
+        int const wet_pct = (int)std::lround(juce::jmin(1.0, 2.0 * m) * 100.0);
+        int const dry_pct = (int)std::lround(juce::jmin(1.0, 2.0 * (1.0 - m)) * 100.0);
+        return juce::String(wet_pct) + "/" + juce::String(dry_pct);
+    };
+
+    Control* const mix = new Control(bridge, wet, "MIX");
+    mix->set_value_hooks(read_mix, write_mix, format_mix);
+    mix->set_hook_default(0.5);
     mix_knobs.add(mix);
     content.addAndMakeVisible(mix);
 
@@ -428,7 +454,7 @@ void EffectsPage::refresh()
         knob->refresh();
     }
 
-    for (MixKnob* const mix : mix_knobs) {
+    for (Control* const mix : mix_knobs) {
         mix->refresh();
     }
 

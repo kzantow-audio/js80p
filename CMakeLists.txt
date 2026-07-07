@@ -52,19 +52,14 @@ target_sources(JS80P PRIVATE
   lib/mtsesp/Client/libMTSClient.cpp
   src/gui/juce.cpp
   src/ui/modulation_manager.cpp
-  src/ui/knob.cpp
+  src/ui/control.cpp
   src/ui/mini_button.cpp
-  src/ui/mix_knob.cpp
-  src/ui/dot_control.cpp
   src/ui/waveform_selector.cpp
   src/ui/filter_type_selector.cpp
   src/ui/selector.cpp
   src/ui/filter_panel.cpp
   src/ui/per_type_editor.cpp
   src/ui/curve_selector.cpp
-  src/ui/env_scale_slider.cpp
-  src/ui/vfader.cpp
-  src/ui/macro_cell.cpp
   src/ui/macro_strip.cpp
   src/ui/modulator_card.cpp
   src/ui/effects_page.cpp
