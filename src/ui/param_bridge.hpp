@@ -42,6 +42,13 @@ class ParamBridge
         {
         }
 
+        /** The wrapped Synth, for whole-patch operations (serialize / import /
+         *  randomize) that go beyond single-parameter reads and writes. */
+        Synth& get_synth() const noexcept
+        {
+            return synth;
+        }
+
         /** Current value ratio [0, 1] (reflects modulation / host / GUI). */
         Number get_ratio(Synth::ParamId const id) const noexcept
         {

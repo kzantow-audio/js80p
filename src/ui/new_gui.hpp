@@ -19,6 +19,7 @@
 #ifndef JS80P__UI__NEW_GUI_HPP
 #define JS80P__UI__NEW_GUI_HPP
 
+#include <functional>
 #include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -33,6 +34,7 @@
 #include "ui/filter_panel.hpp"
 #include "ui/knob.hpp"
 #include "ui/macro_strip.hpp"
+#include "ui/mini_button.hpp"
 #include "ui/modulation_manager.hpp"
 #include "ui/modulator_card.hpp"
 #include "ui/param_bridge.hpp"
@@ -55,10 +57,15 @@ namespace JS80P
 class NewGui : public juce::Component, private juce::Timer
 {
     public:
-        enum class Page { SYNTH, EFFECTS };
+        enum class Page { SYNTH, EFFECTS, MATRIX };
 
         explicit NewGui(Synth& synth);
         ~NewGui() override;
+
+        /** Notified (with true) when the MATRIX tab becomes active and (with
+         *  false) when it is left, so the host editor can show / hide the embedded
+         *  legacy GUI in the body area. */
+        std::function<void(bool)> on_matrix;
 
         void paint(juce::Graphics& g) override;
         void resized() override;
@@ -102,8 +109,16 @@ class NewGui : public juce::Component, private juce::Timer
         void layout_cards();
         void init_patch();
 
+        /* Header preset actions (mirroring the original GUI's buttons). */
+        void open_preset();
+        void save_preset();
+        void randomize_preset();
+
         ParamBridge bridge;
-        juce::TextButton init_button;
+        /* Header action buttons, styled like the BPM / COMP mini buttons:
+         * INIT, then OPEN / RND / SAVE preset actions, left-aligned. */
+        juce::OwnedArray<MiniButton> header_buttons;
+        std::unique_ptr<juce::FileChooser> file_chooser;
         /* Global effect output volume (EV3V), a header knob to the right of the
          * tabs with its OUT caption drawn to the left (no value readout). */
         std::unique_ptr<Knob> out_knob;
@@ -149,6 +164,7 @@ class NewGui : public juce::Component, private juce::Timer
         juce::Rectangle<int> header_bounds;
         juce::Rectangle<int> tab_synth_bounds;
         juce::Rectangle<int> tab_effects_bounds;
+        juce::Rectangle<int> tab_matrix_bounds;
         juce::Rectangle<int> body_bounds;
         juce::Rectangle<int> osc1_bounds;
         juce::Rectangle<int> osc1_panel_bounds;   /* full column incl. filters */

@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <algorithm>
 #include <cmath>
 
 #include "ui/modulator_card.hpp"
@@ -317,15 +318,17 @@ void ModulatorCard::resized()
 {
     juce::Rectangle<int> b = getLocalBounds().reduced(6);
 
-    /* SCL slider in the middle of the header row: destination badges keep the
-     * left, and ~40px on the far right stays clear for later per-member circles. */
+    /* SCL slider right-aligned against the far-right instability dots (time /
+     * level inaccuracy), sitting just to their left; destination badges keep the
+     * left of the header row. */
     if (env_scale != nullptr) {
-        int const far_right = 40;
         int const scl_w = 134;
         int const scl_h = 16;
         int const scl_y = 3;
-        int scl_x = getWidth() / 2 - scl_w / 2;
-        scl_x = juce::jmin(scl_x, getWidth() - far_right - scl_w);
+        /* Mirror the dot geometry below (sz 16, gap 5, right = width - 6) to find
+         * the left edge of the leftmost (time inaccuracy) dot. */
+        int const dots_left = getWidth() - 6 - 2 * 16 - 5;
+        int scl_x = dots_left - 8 - scl_w;
         scl_x = juce::jmax(scl_x, 8);
         env_scale->setBounds(scl_x, scl_y, scl_w, scl_h);
     }
@@ -386,8 +389,9 @@ void ModulatorCard::resized()
      * their own space along the bottom edge. */
     int const cw = 16;   /* curve square */
     int const sw = 26;   /* sustain fader */
-    int const kw = juce::jmax(28, (b.getWidth() - 3 * cw - sw) / 5);
-    int const total = 5 * kw + 3 * cw + sw;
+    int const sus_pad = 4;   /* room right of SUS so a wide mod source clears REL */
+    int const kw = juce::jmax(28, (b.getWidth() - 3 * cw - sw - sus_pad) / 5);
+    int const total = 5 * kw + 3 * cw + sw + sus_pad;
     int const h = b.getHeight();
     int x = b.getX() + juce::jmax(0, (b.getWidth() - total) / 2);
 
@@ -412,7 +416,7 @@ void ModulatorCard::resized()
     place_knob(3);    /* DEC */
     place_curve(1);   /* decay curve */
     sus_fader->setBounds(x, b.getY(), sw, h);   /* SUS */
-    x += sw;
+    x += sw + sus_pad;
     place_knob(4);    /* REL */
     place_curve(2);   /* release curve */
 }
@@ -471,29 +475,112 @@ void ModulatorCard::paint(juce::Graphics& g)
     g.setColour(Modulation::colour(type));
     g.fillRect(0.0f, 0.0f, 2.0f, (float)getHeight());
 
-    /* One-line header: each slot next to its destination -
-     * "E1 <dest> E5 <dest> ...". */
     juce::Font const sf(juce::FontOptions().withHeight(12.0f).withStyle("Bold"));
     juce::Font const df(juce::FontOptions().withHeight(11.0f));
-    int const right = getWidth() - 8;
-    int x = 8;
+    juce::Colour const accent = Modulation::colour(type);
+
+    auto tw = [](juce::Font const& f, juce::String const& s) {
+        return (int)juce::GlyphArrangement::getStringWidth(f, s);
+    };
+
+    int const left = 8;
+    int const y = 3;
+    int const th = 14;
+
+    /* Keep the header text clear of the right-side header controls: on envelope
+     * cards the SCL slider (with the instability dots beyond it) owns the right
+     * of the row, so the title must stop at the SCL's left edge. */
+    int const right = (env_scale != nullptr)
+        ? juce::jmax(left, env_scale->getX() - 6)
+        : getWidth() - 8;
+    int const avail = right - left;
+
+    /* Preferred layout: each slot next to its destination -
+     * "E1 <dest>  E5 <dest> ...". */
+    int full_w = 0;
 
     for (std::pair<int, Synth::ParamId> const& c : connections) {
-        if (x >= right) {
-            break;
+        juce::String const slot = juce::String(Modulation::prefix(type)) + juce::String(c.first);
+        juce::String const dest = Modulation::display_dest_name(bridge.param_name(c.second));
+        full_w += tw(sf, slot) + 4 + tw(df, dest) + 10;
+    }
+
+    if (full_w <= avail) {
+        int x = left;
+
+        for (std::pair<int, Synth::ParamId> const& c : connections) {
+            juce::String const slot = juce::String(Modulation::prefix(type)) + juce::String(c.first);
+            g.setFont(sf);
+            g.setColour(accent);
+            g.drawText(slot, x, y, right - x, th, juce::Justification::centredLeft, false);
+            x += tw(sf, slot) + 4;
+
+            juce::String const dest = Modulation::display_dest_name(bridge.param_name(c.second));
+            g.setFont(df);
+            g.setColour(Theme::TEXT_DIM);
+            g.drawText(dest, x, y, right - x, th, juce::Justification::centredLeft, false);
+            x += tw(df, dest) + 10;
         }
 
-        juce::String const slot = juce::String(Modulation::prefix(type)) + juce::String(c.first);
-        g.setFont(sf);
-        g.setColour(Modulation::colour(type));
-        g.drawText(slot, x, 3, right - x, 14, juce::Justification::centredLeft, false);
-        x += (int)juce::GlyphArrangement::getStringWidth(sf, slot) + 4;
+        return;
+    }
 
+    /* Too wide for the interleaved form: fall back to a compact one - every
+     * envelope name, a dash, then the modulation targets, ellipsised to fit,
+     * e.g. "E1 E5 E7 - AMP1 AMP2 E..". */
+    juce::String slots;
+    std::vector<int> seen;
+
+    for (std::pair<int, Synth::ParamId> const& c : connections) {
+        if (std::find(seen.begin(), seen.end(), c.first) != seen.end()) {
+            continue;
+        }
+
+        seen.push_back(c.first);
+        slots += (slots.isEmpty() ? "" : " ")
+            + juce::String(Modulation::prefix(type)) + juce::String(c.first);
+    }
+
+    juce::String dests;
+
+    for (std::pair<int, Synth::ParamId> const& c : connections) {
         juce::String const dest = Modulation::display_dest_name(bridge.param_name(c.second));
+        dests += (dests.isEmpty() ? "" : " ") + dest;
+    }
+
+    /* Trim a string (dropping whole characters) until it plus a trailing ".."
+     * fits the given width. */
+    auto fit = [&](juce::Font const& f, juce::String s, int const maxw) {
+        if (tw(f, s) <= maxw) {
+            return s;
+        }
+
+        while (s.isNotEmpty() && tw(f, s + "..") > maxw) {
+            s = s.dropLastCharacters(1);
+        }
+
+        return s.trimEnd() + "..";
+    };
+
+    int x = left;
+
+    juce::String const slots_fit = fit(sf, slots, right - x);
+    g.setFont(sf);
+    g.setColour(accent);
+    g.drawText(slots_fit, x, y, right - x, th, juce::Justification::centredLeft, false);
+    x += tw(sf, slots_fit);
+
+    /* Only append the targets if all envelope names fit (otherwise the names
+     * themselves were already ellipsised). */
+    if (slots_fit == slots && !dests.isEmpty()) {
+        juce::String const sep = " - ";
         g.setFont(df);
         g.setColour(Theme::TEXT_DIM);
-        g.drawText(dest, x, 3, right - x, 14, juce::Justification::centredLeft, false);
-        x += (int)juce::GlyphArrangement::getStringWidth(df, dest) + 10;
+        g.drawText(sep, x, y, right - x, th, juce::Justification::centredLeft, false);
+        x += tw(df, sep);
+
+        g.drawText(fit(df, dests, right - x), x, y, right - x, th,
+                   juce::Justification::centredLeft, false);
     }
 }
 

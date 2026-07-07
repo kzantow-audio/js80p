@@ -18,6 +18,8 @@
 
 #include "ui/new_gui.hpp"
 
+#include "serializer.hpp"
+
 #include "ui/param_labels.hpp"
 #include "ui/theme.hpp"
 
@@ -78,10 +80,17 @@ NewGui::NewGui(Synth& synth)
     mod_viewport.setScrollBarsShown(true, false);
     addAndMakeVisible(mod_viewport);
 
-    init_button.setButtonText("INIT");
-    init_button.setWantsKeyboardFocus(false);
-    init_button.onClick = [this]() { init_patch(); };
-    addAndMakeVisible(init_button);
+    /* Header action buttons, styled exactly like the BPM / COMP mini buttons:
+     * INIT (reset patch) followed by the OPEN / RND / SAVE preset actions. */
+    auto add_header_button = [this](juce::String label, std::function<void()> action) {
+        MiniButton* const button = new MiniButton(std::move(label), std::move(action));
+        header_buttons.add(button);
+        addAndMakeVisible(button);
+    };
+    add_header_button("INIT", [this]() { init_patch(); });
+    add_header_button("OPEN", [this]() { open_preset(); });
+    add_header_button("RND",  [this]() { randomize_preset(); });
+    add_header_button("SAVE", [this]() { save_preset(); });
 
     /* Global effect output volume, promoted to a header knob (right of the
      * tabs). Bare dial with the OUT caption drawn to its left; a macro-
@@ -90,9 +99,10 @@ NewGui::NewGui(Synth& synth)
         bridge, Synth::ParamId::EV3V, "OUT", Control::Style::ROTARY, Control::Size::SMALL
     );
     out_knob->set_manager(&manager);
-    out_knob->set_mod_caps(Modulation::CAP_MACRO);
+    out_knob->set_mod_caps(Modulation::CAP_LFO | Modulation::CAP_MACRO);   /* EV3V: LFO + macro */
     out_knob->set_bare(true);
     out_knob->set_source_placeholder(true);   /* always show an (empty) modulation box */
+    out_knob->set_badge_centred(true);   /* modulation box centred on the dial, not top-right */
     addAndMakeVisible(*out_knob);
 
     /* The EFFECTS page shares the body area; hidden until its tab is active. */
@@ -117,7 +127,7 @@ NewGui::NewGui(Synth& synth)
         "1", "2"
     );
     osc1_type = new PerTypeEditor(
-        bridge, Synth::ParamId::MWFM, Synth::ParamId::MPW, Synth::ParamId::MC1
+        bridge, manager, Synth::ParamId::MWFM, Synth::ParamId::MPW, Synth::ParamId::MC1
     );
     type_editors.add(osc1_type);
     addAndMakeVisible(osc1_type);
@@ -162,7 +172,7 @@ NewGui::NewGui(Synth& synth)
         "3", "4"
     );
     osc2_type = new PerTypeEditor(
-        bridge, Synth::ParamId::CWFM, Synth::ParamId::CPW, Synth::ParamId::CC1
+        bridge, manager, Synth::ParamId::CWFM, Synth::ParamId::CPW, Synth::ParamId::CC1
     );
     type_editors.add(osc2_type);
     addAndMakeVisible(osc2_type);
@@ -194,6 +204,12 @@ Knob& NewGui::add_knob(
 ) {
     Knob* const knob = new Knob(bridge, id, label);
     knob->set_manager(&manager);
+    /* Discrete (byte) params - e.g. the carrier distortion TYPE knob - only accept
+     * macro / MIDI controllers in the engine; the LFO / envelope routes are no-ops
+     * for them, so don't offer them. Continuous oscillator params keep CAP_ALL. */
+    if (bridge.is_discrete(id)) {
+        knob->set_mod_caps(Modulation::CAP_MACRO);
+    }
     knobs.add(knob);
     column.push_back(knob);
     addAndMakeVisible(knob);
@@ -351,11 +367,23 @@ void NewGui::set_page(Page const page)
     active_page = page;
 
     bool const synth = (page == Page::SYNTH);
-    set_synth_visible(synth);
-    effects_page.setVisible(!synth);
+    bool const effects = (page == Page::EFFECTS);
+    bool const matrix = (page == Page::MATRIX);
 
-    if (!synth) {
+    set_synth_visible(synth);
+    effects_page.setVisible(effects);
+
+    /* The macro strip stays on the SYNTH and EFFECTS pages, but the MATRIX page
+     * hands the whole body to the embedded legacy GUI. */
+    macro_strip.setVisible(!matrix);
+
+    if (effects) {
         effects_page.refresh();
+    }
+
+    /* Let the host editor show / hide the embedded legacy GUI in the body. */
+    if (on_matrix) {
+        on_matrix(matrix);
     }
 
     repaint();
@@ -370,6 +398,8 @@ void NewGui::mouseUp(juce::MouseEvent const& event)
         set_page(Page::SYNTH);
     } else if (tab_effects_bounds.contains(p)) {
         set_page(Page::EFFECTS);
+    } else if (tab_matrix_bounds.contains(p)) {
+        set_page(Page::MATRIX);
     }
 }
 
@@ -429,6 +459,82 @@ void NewGui::init_patch()
 }
 
 
+void NewGui::open_preset()
+{
+    file_chooser = std::make_unique<juce::FileChooser>(
+        "Import patch", juce::File(), "*.js80p"
+    );
+
+    NewGui* const self = this;
+
+    file_chooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [self](juce::FileChooser const& fc) {
+            juce::File const file = fc.getResult();
+
+            if (file == juce::File()) {
+                return;
+            }
+
+            juce::MemoryBlock block;
+
+            if (!file.loadFileAsData(block)) {
+                return;
+            }
+
+            size_t const size = juce::jmin(
+                (size_t)Serializer::MAX_SIZE, block.getSize()
+            );
+            std::string const patch(static_cast<char const*>(block.getData()), size);
+
+            /* GUI-thread import enqueues the changes to the audio thread; the
+             * 30 Hz refresh then picks up the new values and assignments. */
+            Serializer::import_patch_in_gui_thread(self->bridge.get_synth(), patch);
+        }
+    );
+}
+
+
+void NewGui::save_preset()
+{
+    file_chooser = std::make_unique<juce::FileChooser>(
+        "Export patch", juce::File(), "*.js80p"
+    );
+
+    NewGui* const self = this;
+
+    file_chooser->launchAsync(
+        juce::FileBrowserComponent::saveMode
+            | juce::FileBrowserComponent::canSelectFiles
+            | juce::FileBrowserComponent::warnAboutOverwriting,
+        [self](juce::FileChooser const& fc) {
+            juce::File file = fc.getResult();
+
+            if (file == juce::File()) {
+                return;
+            }
+
+            if (file.getFileExtension().isEmpty()) {
+                file = file.withFileExtension("js80p");
+            }
+
+            std::string const patch = Serializer::serialize(self->bridge.get_synth());
+            file.replaceWithText(
+                juce::String::fromUTF8(patch.data(), (int)patch.size())
+            );
+        }
+    );
+}
+
+
+void NewGui::randomize_preset()
+{
+    bridge.get_synth().push_message(
+        Synth::MessageType::RANDOMIZE, Synth::ParamId::INVALID_PARAM_ID, 0.0, 0
+    );
+}
+
+
 void NewGui::rebuild_cards()
 {
     cards.clear();
@@ -467,28 +573,42 @@ void NewGui::resized()
     juce::Rectangle<int> area = getLocalBounds();
 
     header_bounds = area.removeFromTop(46);
-    init_button.setBounds(header_bounds.getX() + 96, header_bounds.getCentreY() - 11, 52, 22);
 
-    /* Global OUT knob in the header, in the gap between the tabs and the
-     * editor's "Detailed view" toggle (which the plugin editor pins to the top
-     * right, ~108px wide). A small effects-sized dial with its caption to the
-     * left; shifted further left so its (empty) modulation box on the right
-     * clears the Detailed-view toggle. */
+    /* Header action buttons, left-aligned just after the JS80P title, laid out
+     * left to right at the mini-button height. */
+    {
+        int const bh = 16;
+        int const by = header_bounds.getCentreY() - bh / 2;
+        int bx = header_bounds.getX() + 96;
+
+        for (MiniButton* const button : header_buttons) {
+            int const bw = button->preferred_width();
+            button->setBounds(bx, by, bw, bh);
+            bx += bw + 4;
+        }
+    }
+
+    /* Global OUT knob pinned to the header's right edge, its (empty) modulation
+     * box padded 8px from the plugin's right side. A small effects-sized dial
+     * with its caption to the left; the box is vertically centred on the dial. */
     {
         int const out_sz = 34;
-        int const reserved_right = 140;   /* clear the toggle + the modulation box */
-        int const kx = header_bounds.getRight() - reserved_right - out_sz;
+        int const badge_pad = 8;   /* gap from the plugin's right edge to the mod box */
+        /* The centred mod box sits ~15px right of the dial's bounds (dial right
+         * edge + 4px gap + 16px box, less the 5px the circle is inset). */
+        int const badge_overhang = 15;
+        int const kx = header_bounds.getRight() - badge_pad - badge_overhang - out_sz;
         int const ky = header_bounds.getCentreY() - out_sz / 2;
         out_knob->setBounds(kx, ky, out_sz, out_sz);
         out_label_bounds =
             juce::Rectangle<int>(kx - 4 - 34, header_bounds.getY(), 34, header_bounds.getHeight());
     }
 
-    /* SYNTH / EFFECTS tabs, centred in the header row. */
+    /* SYNTH / EFFECTS / MATRIX tabs, centred in the header row. */
     {
         int const tab_w = 92;
         int const tab_gap = 4;
-        int const total = 2 * tab_w + tab_gap;
+        int const total = 3 * tab_w + 2 * tab_gap;
         int const x0 = header_bounds.getCentreX() - total / 2;
         /* Tabs span the full header height (no vertical padding) so the active
          * tab's edge glow is measured against the whole header. */
@@ -496,6 +616,7 @@ void NewGui::resized()
         int const tab_h = header_bounds.getHeight();
         tab_synth_bounds = juce::Rectangle<int>(x0, ty, tab_w, tab_h);
         tab_effects_bounds = juce::Rectangle<int>(x0 + tab_w + tab_gap, ty, tab_w, tab_h);
+        tab_matrix_bounds = juce::Rectangle<int>(x0 + 2 * (tab_w + tab_gap), ty, tab_w, tab_h);
     }
 
     /* The macro strip is always visible (both pages). */
@@ -673,9 +794,10 @@ void NewGui::draw_panel(
 
 void NewGui::paint_tabs(juce::Graphics& g)
 {
-    struct { juce::Rectangle<int> const& r; char const* label; bool on; } const tabs[2] = {
+    struct { juce::Rectangle<int> const& r; char const* label; bool on; } const tabs[3] = {
         { tab_synth_bounds, "SYNTH", active_page == Page::SYNTH },
         { tab_effects_bounds, "EFFECTS", active_page == Page::EFFECTS },
+        { tab_matrix_bounds, "MATRIX", active_page == Page::MATRIX },
     };
 
     g.setFont(juce::Font(juce::FontOptions().withHeight(12.0f).withStyle("Bold")));
@@ -748,7 +870,10 @@ void NewGui::paint(juce::Graphics& g)
 
     paint_tabs(g);
 
-    if (active_page == Page::EFFECTS) {
+    /* Only the SYNTH page draws the oscillator / mix / modulator panels; the
+     * EFFECTS page draws its own children, and the MATRIX page hands the body to
+     * the embedded legacy GUI (leaving the uncovered area as empty background). */
+    if (active_page != Page::SYNTH) {
         return;
     }
 

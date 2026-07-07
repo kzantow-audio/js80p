@@ -56,13 +56,19 @@ class JS80PEditor : public juce::AudioProcessorEditor,
         ) override;
 
     private:
-        void update_toggle();
+        /* Show / hide + size the embedded legacy GUI when the MATRIX tab of the
+         * new GUI is entered / left. */
+        void set_matrix(bool const active);
+        void layout_matrix();
 
         JS80PProcessor& processor;
         JS80P::GUI* gui;
         std::unique_ptr<NewGui> new_gui;
-        juce::TextButton toggle_button;
-        bool show_new_gui;
+        /* Container that hosts the (reparented) legacy GUI root under the MATRIX
+         * tab, sized to fit the body area below the header (background-size:
+         * contain). */
+        juce::Component matrix_host;
+        bool matrix_active;
         bool in_resize;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JS80PEditor)

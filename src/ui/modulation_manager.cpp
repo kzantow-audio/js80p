@@ -423,8 +423,10 @@ int ModulationManager::assign_random(
         return 0;
     }
 
-    /* No input controller: the macro's full randomness makes it emit random
-     * values within its per-location range (min/max). */
+    /* Full randomness makes the macro emit random values within its per-location
+     * range (min/max). Its input follows Osc 2's output peak so a fresh random
+     * value is drawn as the sound re-triggers, rather than staying frozen. */
+    bridge.assign_controller(Modulation::macro_in(slot), Synth::ControllerId::OSC_2_PEAK);
     bridge.set_ratio(Modulation::macro_rnd(slot), 1.0);
     bridge.set_ratio(Modulation::macro_min(slot), base_ratio);
     bridge.set_ratio(Modulation::macro_max(slot), juce::jlimit(0.0, 1.0, base_ratio + 0.5));

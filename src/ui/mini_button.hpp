@@ -19,6 +19,7 @@
 #ifndef JS80P__UI__MINI_BUTTON_HPP
 #define JS80P__UI__MINI_BUTTON_HPP
 
+#include <functional>
 #include <utility>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -38,6 +39,10 @@ namespace JS80P
  *        (wrapping); for a two-option parameter that is a plain on/off toggle.
  *        A fixed label is shown, or the current option's name when option
  *        labels are supplied (e.g. the side-chain COMP / EXPD mode).
+ *
+ *        A second form is a plain *action* button (fixed label + click handler,
+ *        no parameter) drawn in the outline state, used for the header's INIT /
+ *        preset actions so they match the BPM / COMP styling exactly.
  */
 class MiniButton : public juce::Component
 {
@@ -47,6 +52,9 @@ class MiniButton : public juce::Component
             Synth::ParamId const param_id,
             juce::String label
         );
+
+        /** Action button: outline styling, fires \c on_click, no bound param. */
+        MiniButton(juce::String label, std::function<void()> on_click);
 
         /** Show the current option's name (from \c labels) instead of the fixed
          *  label text. */
@@ -63,10 +71,12 @@ class MiniButton : public juce::Component
         void mouseExit(juce::MouseEvent const& event) override;
 
     private:
-        ParamBridge& bridge;
+        ParamBridge* bridge;
         Synth::ParamId const param_id;
         juce::String label;
         juce::StringArray option_labels;
+        std::function<void()> on_click;   /* set for action buttons */
+        bool action;
         int value;
         bool hover;
 

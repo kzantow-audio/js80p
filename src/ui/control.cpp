@@ -92,9 +92,12 @@ class ModBadge : public juce::Component
             juce::Rectangle<float> const r = getLocalBounds().toFloat();
 
             if (!owner.assigned) {
-                /* Unassigned placeholder: an empty outline chip inviting a click. */
-                g.setColour(Theme::TEXT_DIM);
-                g.drawRoundedRectangle(r.reduced(0.5f), 3.0f, 1.0f);
+                /* Unassigned placeholder: a barely-there white fill chip (5%
+                 * opacity, no outline) filling the same box an assigned badge
+                 * would - just visible enough to reveal the modulation slot on
+                 * every modulatable control. */
+                g.setColour(juce::Colours::white.withAlpha(0.05f));
+                g.fillRoundedRectangle(r, 3.0f);
                 return;
             }
 
@@ -103,7 +106,7 @@ class ModBadge : public juce::Component
             g.fillRoundedRectangle(r, 3.0f);
             g.setColour(c);
             g.setFont(juce::Font(juce::FontOptions().withHeight(10.0f).withStyle("Bold")));
-            g.drawText(owner.mod_label, r, juce::Justification::centred, false);
+            g.drawText(owner.badge_text(), r, juce::Justification::centred, false);
         }
 
         void mouseDown(juce::MouseEvent const& event) override
@@ -175,6 +178,12 @@ Control::Control(
     style(style),
     size_tier(size),
     label_pos(style == Style::DOT ? LabelPos::NONE : LabelPos::TOP),
+    /* No control paints its value on the dial any more - the hover / drag popover
+     * surfaces it on demand. ALWAYS still *reserves* the value strip, though, so a
+     * captioned knob keeps the caption + dial + (now blank) strip layout its cell
+     * was sized for; removing that reservation is what dropped and un-centred every
+     * knob. The value-less styles (dots, sliders, macro cells, bare header knobs)
+     * opt down to POPOVER / NONE and reclaim the strip. */
     value_display(style == Style::DOT ? ValueDisplay::NONE : ValueDisplay::ALWAYS),
     source_placeholder(false),
     macro_mode(false),
@@ -192,6 +201,7 @@ Control::Control(
     semitone_snap(false),
     compact(size == Size::SMALL),
     bare(false),
+    centred_badge(false),
     hover(false),
     assigned(false),
     mod_type(Modulation::LFO),
@@ -219,6 +229,7 @@ void Control::set_min_ratio(double const r) { min_ratio = juce::jlimit(0.0, 1.0,
 void Control::set_label_placement(LabelPos const p) { label_pos = p; resized(); repaint(); }
 void Control::set_value_display(ValueDisplay const d) { value_display = d; resized(); repaint(); }
 void Control::set_source_placeholder(bool const on) { source_placeholder = on; update_badge(); }
+void Control::set_badge_centred(bool const on) { centred_badge = on; update_badge(); }
 
 
 void Control::set_macro(int const slot)
@@ -476,10 +487,10 @@ void Control::update_macro_assignment()
     bool const now = src != Synth::ControllerId::NONE || random;
 
     juce::String new_label;
-    if (src != Synth::ControllerId::NONE) {
+    if (random) {
+        new_label = "Rnd";   /* a random macro reads as "Rnd" even with a peak input */
+    } else if (src != Synth::ControllerId::NONE) {
         new_label = Modulation::source_short_name(src);
-    } else if (random) {
-        new_label = "Rnd";
     }
 
     bool const changed = now != assigned || new_label != mod_label;
@@ -528,13 +539,14 @@ void Control::update_assignment()
 
             if (type == Modulation::MACRO) {
                 src = bridge.controller(Modulation::macro_in(slot));
-                if (src != Synth::ControllerId::NONE) {
-                    mod_label = Modulation::source_short_name(src);
-                } else if (bridge.get_ratio(Modulation::macro_rnd(slot)) >= 0.99) {
-                    /* An intermediate macro with no input but full randomness is a
-                     * "Random" source. */
+
+                /* A fully-random intermediate macro is a "Random" source, even
+                 * though its input follows Osc 2's peak (so it re-draws per note). */
+                if (bridge.get_ratio(Modulation::macro_rnd(slot)) >= 0.99) {
                     mod_label = "Rnd";
                     is_random = true;
+                } else if (src != Synth::ControllerId::NONE) {
+                    mod_label = Modulation::source_short_name(src);
                 }
             }
 
@@ -553,7 +565,10 @@ void Control::update_assignment()
 
 bool Control::badge_shown() const
 {
-    return assigned || (source_placeholder && (manager != nullptr || macro_mode));
+    /* Every modulatable control shows its badge across the whole plugin: an empty
+     * (barely-visible) placeholder when unassigned, the source chip once assigned.
+     * A control is modulatable when it has a manager or is a macro cell. */
+    return assigned || manager != nullptr || macro_mode;
 }
 
 
@@ -578,12 +593,9 @@ void Control::update_badge()
         badge->toFront(false);
     }
 
-    /* The empty placeholder box is 2px smaller in both dimensions so its outline
-     * border sits inside the space an assigned (filled) badge would occupy. */
-    juce::Rectangle<float> br = badge_rect();
-    if (!assigned) {
-        br = br.reduced(1.0f);
-    }
+    /* The empty placeholder occupies the same box an assigned badge would (it is
+     * not shrunk), so the modulation slot reads at a consistent size everywhere. */
+    juce::Rectangle<float> const br = badge_rect();
     badge->setBounds(
         getX() + juce::roundToInt(br.getX()),
         getY() + juce::roundToInt(br.getY()),
@@ -600,25 +612,14 @@ bool Control::title_on_knob() const
 }
 
 
-bool Control::value_on_knob() const
-{
-    return value_display == ValueDisplay::ALWAYS;
-}
-
-
 bool Control::popover_shown() const
 {
     if (editor != nullptr) {
         return true;   /* the edit bubble reuses the popover as its container */
     }
 
-    /* The popover exists to surface whatever the knob itself does not already
-     * show: the title, the value, or both. When the knob shows both there is
-     * nothing to add, so no popover. Otherwise it appears on hover and drag. */
-    if (title_on_knob() && value_on_knob()) {
-        return false;
-    }
-
+    /* No control shows its value inline any more, so the popover surfaces it on
+     * every hover and drag (the title, if hidden, rides along above it). */
     return hover || dragging || dragging_depth;
 }
 
@@ -804,12 +805,6 @@ void Control::refresh()
 }
 
 
-juce::String Control::format_value() const
-{
-    return format_ratio(ratio);
-}
-
-
 juce::String Control::format_ratio(double const r) const
 {
     if (format_value_hook) {
@@ -884,20 +879,6 @@ juce::Rectangle<int> Control::label_strip() const
 }
 
 
-juce::Rectangle<int> Control::value_strip() const
-{
-    juce::Rectangle<int> b = getLocalBounds().reduced(2);
-
-    if (label_pos == LabelPos::LEFT) {
-        b.removeFromLeft(LEFT_GUTTER);
-    } else if (label_pos == LabelPos::TOP) {
-        b.removeFromTop(STRIP);
-    }
-
-    return value_display == ValueDisplay::ALWAYS ? b.removeFromBottom(STRIP) : juce::Rectangle<int>();
-}
-
-
 juce::Rectangle<float> Control::knob_circle() const
 {
     if (style == Style::DOT) {
@@ -942,11 +923,9 @@ juce::Rectangle<float> Control::track_rect() const
         return b;
     }
 
-    /* V_SLIDER: a vertical groove, room at the top for the badge. */
+    /* V_SLIDER: a vertical groove using the full body height - the badge now sits
+     * to the right of the groove (like a knob), not above it. */
     b = b.withSizeKeepingCentre(thickness, b.getHeight());
-    if (badge_shown()) {
-        b.removeFromTop(BADGE_H + 4.0f);
-    }
     return b;
 }
 
@@ -964,10 +943,16 @@ juce::Point<float> Control::handle_at(double const visual) const
 }
 
 
+juce::String Control::badge_text() const
+{
+    return mod_label.toUpperCase().substring(0, 3);
+}
+
+
 juce::Rectangle<float> Control::badge_rect() const
 {
     juce::Font const bf(juce::FontOptions().withHeight(10.0f).withStyle("Bold"));
-    juce::String const txt = assigned ? mod_label : juce::String();
+    juce::String const txt = assigned ? badge_text() : juce::String();
     float const tw = juce::GlyphArrangement::getStringWidth(bf, txt);
     float const w = juce::jmax(16.0f, tw + 8.0f);
     float const h = BADGE_H;
@@ -979,13 +964,22 @@ juce::Rectangle<float> Control::badge_rect() const
     }
 
     if (style == Style::V_SLIDER) {
-        juce::Rectangle<float> const t = body_bounds().toFloat();
-        return juce::Rectangle<float>(t.getCentreX() - w * 0.5f, t.getY(), w, h);
+        /* To the right of the groove, aligned to its top - mirrors a knob's
+         * top-right badge and the horizontal slider's right-hand badge. */
+        juce::Rectangle<float> const t = track_rect();
+        return juce::Rectangle<float>(t.getRight() + 4.0f, t.getY(), w, h);
     }
 
     if (style == Style::DOT) {
         /* Directly to the right of the pie, vertically centred on it (header
          * pies read as one horizontal "MIX o [box]" row). */
+        juce::Rectangle<float> const kb = knob_circle();
+        return juce::Rectangle<float>(kb.getRight() + 4.0f, kb.getCentreY() - h * 0.5f, w, h);
+    }
+
+    if (centred_badge) {
+        /* Directly to the right of the dial, vertically centred on it (mirrors the
+         * DOT layout) - used by the header OUT knob. */
         juce::Rectangle<float> const kb = knob_circle();
         return juce::Rectangle<float>(kb.getRight() + 4.0f, kb.getCentreY() - h * 0.5f, w, h);
     }
@@ -1025,18 +1019,17 @@ void Control::paint(juce::Graphics& g)
     } else if (is_slider()) {
         paint_slider(g);
     } else {
-        paint_rotary(g, value_strip());
+        paint_rotary(g);
     }
 }
 
 
-void Control::paint_rotary(juce::Graphics& g, juce::Rectangle<int> const& value_area)
+void Control::paint_rotary(juce::Graphics& g)
 {
     juce::Rectangle<float> const kb = knob_circle();
     float const cx = kb.getCentreX();
     float const cy = kb.getCentreY();
     float const r = kb.getWidth() * 0.5f;
-    float const text_font = font_size();
 
     juce::PathStrokeType const stroke(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
 
@@ -1065,11 +1058,6 @@ void Control::paint_rotary(juce::Graphics& g, juce::Rectangle<int> const& value_
                cx + std::sin(pos_angle) * body, cy - std::cos(pos_angle) * body, 2.0f);
 
     if (!assigned) {
-        if (value_display == ValueDisplay::ALWAYS) {
-            g.setColour(Theme::TEXT);
-            g.setFont(text_font);
-            g.drawText(format_value(), value_area, juce::Justification::centred, false);
-        }
         return;
     }
 
@@ -1089,16 +1077,6 @@ void Control::paint_rotary(juce::Graphics& g, juce::Rectangle<int> const& value_
     float const tx = cx + std::sin(target_angle) * rr;
     float const ty = cy - std::cos(target_angle) * rr;
     g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
-
-    /* Below the knob: the line (base) value, or the amount while dragging it. */
-    if (value_display == ValueDisplay::ALWAYS) {
-        double const shown = dragging_depth
-            ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth))
-            : base;
-        g.setColour(dragging_depth ? active : Theme::TEXT);
-        g.setFont(text_font);
-        g.drawText(format_ratio(shown), value_area, juce::Justification::centred, false);
-    }
 }
 
 
@@ -1188,17 +1166,6 @@ void Control::paint_slider(juce::Graphics& g)
         }
 
         g.fillEllipse(m.x - 2.0f, m.y - 2.0f, 4.0f, 4.0f);
-    }
-
-    /* Value readout. */
-    if (value_display == ValueDisplay::ALWAYS) {
-        double const shown = assigned
-            ? (dragging_depth
-                ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth)) : base)
-            : current_ratio();
-        g.setColour(dragging_depth ? active : Theme::TEXT);
-        g.setFont(font_size());
-        g.drawText(format_ratio(shown), value_strip(), juce::Justification::centred, false);
     }
 }
 

@@ -26,7 +26,7 @@ JS80PEditor::JS80PEditor(JS80PProcessor& processor)
     : juce::AudioProcessorEditor(&processor),
     processor(processor),
     gui(nullptr),
-    show_new_gui(true),
+    matrix_active(false),
     in_resize(false)
 {
     setResizable(true, true);
@@ -52,7 +52,8 @@ JS80PEditor::JS80PEditor(JS80PProcessor& processor)
      * now that the filter section and harmonics are more compact. */
     setSize((int)(0.527 * JS80P::GUI::WIDTH_FLOAT), (int)(0.527 * JS80P::GUI::HEIGHT_FLOAT));
 
-    /* Original GUI (JUCE Widget backend) — attached first, sits behind. */
+    /* Original GUI (JUCE Widget backend). Its root is reparented into matrix_host
+     * so the new GUI can embed it, contained, under its MATRIX tab. */
     gui = new JS80P::GUI(
         JucePlugin_VersionString,
         nullptr,
@@ -63,19 +64,18 @@ JS80PEditor::JS80PEditor(JS80PProcessor& processor)
     );
     gui->show();
 
+    /* Host for the embedded legacy GUI (hidden until the MATRIX tab is active). */
+    addChildComponent(matrix_host);
+
+    if (juce::Component* const legacy_root =
+            (juce::Component*)gui->get_root_platform_widget()) {
+        matrix_host.addChildComponent(legacy_root);
+    }
+
     /* New simplified GUI — opaque, on top, shown by default. */
     new_gui = std::make_unique<NewGui>(processor.get_synth());
+    new_gui->on_matrix = [this](bool const active) { set_matrix(active); };
     addAndMakeVisible(*new_gui);
-
-    /* Always-on-top switch between the two. */
-    toggle_button.setWantsKeyboardFocus(false);
-    toggle_button.onClick = [this]() {
-        show_new_gui = !show_new_gui;
-        new_gui->setVisible(show_new_gui);
-        update_toggle();
-    };
-    addAndMakeVisible(toggle_button);
-    update_toggle();
 
     startTimerHz((int)JS80P::GUI::REFRESH_RATE);
 
@@ -94,10 +94,40 @@ JS80PEditor::~JS80PEditor()
 }
 
 
-void JS80PEditor::update_toggle()
+void JS80PEditor::set_matrix(bool const active)
 {
-    toggle_button.setButtonText(show_new_gui ? "Detailed view" : "New view");
-    toggle_button.toFront(false);
+    matrix_active = active;
+    matrix_host.setVisible(active);
+
+    if (active) {
+        gui->show();
+        layout_matrix();
+        matrix_host.toFront(false);   /* over the new GUI's body, below its header */
+    }
+}
+
+
+void JS80PEditor::layout_matrix()
+{
+    if (gui == nullptr || in_resize) {
+        return;
+    }
+
+    /* The body area sits below the new GUI's header (46 px). Scale the legacy GUI
+     * to fit within it, aspect-locked (contain), then centre it — the surrounding
+     * area is left empty. */
+    int const header_h = 46;
+    juce::Rectangle<int> const body(
+        0, header_h, getWidth(), juce::jmax(0, getHeight() - header_h)
+    );
+
+    in_resize = true;
+    gui->resize(body.getWidth(), body.getHeight());
+    in_resize = false;
+
+    juce::Rectangle<int> scaled(0, 0, gui->get_width(), gui->get_height());
+    scaled.setCentre(body.getCentre());
+    matrix_host.setBounds(scaled);   /* the legacy root fills this from (0, 0) */
 }
 
 
@@ -107,16 +137,10 @@ void JS80PEditor::resized()
         new_gui->setBounds(getLocalBounds());
     }
 
-    toggle_button.setBounds(getWidth() - 108, 12, 96, 22);
-    toggle_button.toFront(false);
-
-    if (gui == nullptr || in_resize) {
-        return;
+    if (matrix_active) {
+        layout_matrix();
+        matrix_host.toFront(false);
     }
-
-    in_resize = true;
-    gui->resize(getWidth(), getHeight());
-    in_resize = false;
 }
 
 

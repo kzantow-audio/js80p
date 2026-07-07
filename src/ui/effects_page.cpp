@@ -159,17 +159,50 @@ int EffectsPage::begin_panel(juce::String title, int const row)
 }
 
 
+/* Modulation kinds each continuous effect param accepts, matching the original
+ * GUI's per-knob controller choices (verified against the engine): effects sit on
+ * the single global bus, so they never take a per-voice envelope. Most take LFO +
+ * macro; the tape transport/colour trims and the compressor side-chain params take
+ * macro/MIDI only (no LFO); a few tape trims take no modulation at all. */
+static int fx_mod_caps(Synth::ParamId const id)
+{
+    using P = Synth::ParamId;
+
+    switch (id) {
+        /* SCREW trims in the original GUI (controller choices = 0). */
+        case P::ETWFS: case P::ETSTR: case P::ETHSS:
+            return 0;
+
+        /* Macro / MIDI only (no LFO): tape wow-amount / colour / stop and both
+         * compressors' side-chain threshold / attack / release / ratio. */
+        case P::ETWFA: case P::ETCLR: case P::ETSTP:
+        case P::EECTH: case P::EECAT: case P::EECRL: case P::EECR:
+        case P::ERCTH: case P::ERCAT: case P::ERCRL: case P::ERCR:
+            return Modulation::CAP_MACRO;
+
+        /* Every other continuous effect param: LFO + macro, no envelope. */
+        default:
+            return Modulation::CAP_LFO | Modulation::CAP_MACRO;
+    }
+}
+
+
 Knob* EffectsPage::make_knob(KnobSpec const& spec, bool const medium)
 {
     using P = Synth::ParamId;
 
     Knob* const knob = new Knob(bridge, spec.id, spec.label);
 
-    /* Continuous effect knobs are macro-modulation destinations; the discrete
-     * "type" / "mode" selectors are not. */
+    /* Continuous effect knobs are modulation destinations (LFO / macro, never an
+     * envelope on the global bus); the discrete "type" / "mode" selectors and a
+     * few unmodulatable tape trims are not. */
     if (!bridge.is_discrete(spec.id)) {
-        knob->set_manager(&manager);
-        knob->set_mod_caps(Modulation::CAP_MACRO);
+        int const caps = fx_mod_caps(spec.id);
+
+        if (caps != 0) {
+            knob->set_manager(&manager);
+            knob->set_mod_caps(caps);
+        }
     }
 
     /* Frequency cutoffs (filters, damping, HPF): an exponential 20 Hz .. 20 kHz

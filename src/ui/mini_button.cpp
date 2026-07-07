@@ -30,10 +30,24 @@ MiniButton::MiniButton(
         ParamBridge& bridge,
         Synth::ParamId const param_id,
         juce::String label
-) : bridge(bridge),
+) : bridge(&bridge),
     param_id(param_id),
     label(std::move(label)),
+    action(false),
     value(bridge.get_discrete(param_id)),
+    hover(false)
+{
+    setWantsKeyboardFocus(false);
+}
+
+
+MiniButton::MiniButton(juce::String label, std::function<void()> on_click)
+    : bridge(nullptr),
+    param_id(Synth::ParamId::INVALID_PARAM_ID),
+    label(std::move(label)),
+    on_click(std::move(on_click)),
+    action(true),
+    value(0),
     hover(false)
 {
     setWantsKeyboardFocus(false);
@@ -61,7 +75,11 @@ int MiniButton::preferred_width() const
 
 void MiniButton::refresh()
 {
-    int const live = bridge.get_discrete(param_id);
+    if (action) {
+        return;
+    }
+
+    int const live = bridge->get_discrete(param_id);
 
     if (live != value) {
         value = live;
@@ -72,7 +90,8 @@ void MiniButton::refresh()
 
 void MiniButton::paint(juce::Graphics& g)
 {
-    bool const on = value != 0;
+    /* Action buttons always render in the outline (off) state. */
+    bool const on = !action && value != 0;
     juce::Colour const c = Theme::ACCENT;
     juce::Rectangle<float> const r = getLocalBounds().toFloat().reduced(0.5f);
     float const radius = 2.0f;
@@ -106,9 +125,16 @@ void MiniButton::mouseUp(juce::MouseEvent const& event)
         return;
     }
 
-    int const count = juce::jmax(2, bridge.option_count(param_id));
-    value = (bridge.get_discrete(param_id) + 1) % count;
-    bridge.set_discrete(param_id, value);
+    if (action) {
+        if (on_click) {
+            on_click();
+        }
+        return;
+    }
+
+    int const count = juce::jmax(2, bridge->option_count(param_id));
+    value = (bridge->get_discrete(param_id) + 1) % count;
+    bridge->set_discrete(param_id, value);
     repaint();
 }
 

@@ -67,6 +67,10 @@ class Control : public juce::Component, public juce::SettableTooltipClient
 
         enum class LabelPos { NONE, TOP, LEFT };
 
+        /* NONE   - no reserved value strip, value only via popover (bare / harmonic).
+         * ALWAYS - reserve the value strip so the cell layout is preserved; the value
+         *          is still shown only in the hover / drag popover, not inline.
+         * POPOVER- no reserved strip (dots / sliders / macro cells), popover value. */
         enum class ValueDisplay { NONE, ALWAYS, POPOVER };
 
         Control(
@@ -142,6 +146,12 @@ class Control : public juce::Component, public juce::SettableTooltipClient
          *  nothing is assigned, so the modulation slot is always discoverable. */
         void set_source_placeholder(bool const on);
 
+        /** Anchor the modulation badge to the right of the dial, vertically
+         *  centred on it (like a DOT), instead of the default top-right corner.
+         *  Used by the header OUT knob so its badge lines up with the knob's
+         *  centre. */
+        void set_badge_centred(bool const on);
+
         /** Own a small child control anchored beside the dial / slider end
          *  (e.g. a distortion-curve selector). \c refresh, if given, is called
          *  every frame so the child can track external param changes. */
@@ -186,6 +196,23 @@ class Control : public juce::Component, public juce::SettableTooltipClient
             juce::MouseWheelDetails const& wheel
         ) override;
 
+    protected:
+        /* Subclass hooks (used by HarmonicSlider, which renders a bipolar bar but
+         * reuses the whole value / modulation / badge core). The two geometry
+         * helpers are virtual so a subclass can relocate the track and badge. */
+        virtual juce::Rectangle<float> track_rect() const;    /* sliders */
+        virtual juce::Rectangle<float> badge_rect() const;
+
+        juce::Rectangle<int> body_bounds() const;    /* dial/track area after strips */
+        juce::Point<float> handle_at(double const visual) const;  /* sliders */
+
+        double mod_base() const { return base; }
+        double mod_depth() const { return depth; }
+        double value_ratio() const { return current_ratio(); }
+        double to_visual(double const r) const { return ratio_to_visual(r); }
+        /* Base (unassigned) or modulation (assigned) accent colour. */
+        juce::Colour active_colour() const { return assigned ? mod_colour : accent(); }
+
     private:
         friend class ModBadge;
         friend class ValuePopover;
@@ -199,9 +226,7 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         float font_size() const;
         int strip_h() const;   /* reserved caption/value strip height (0 when off) */
 
-        juce::Rectangle<int> body_bounds() const;    /* dial/track area after strips */
         juce::Rectangle<int> label_strip() const;
-        juce::Rectangle<int> value_strip() const;
 
         bool over_ring(juce::Point<float> const p) const;
         bool over_depth_zone(juce::Point<float> const p) const;
@@ -218,10 +243,11 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         void update_popover();
         bool popover_shown() const;
         bool title_on_knob() const;   /* caption rendered on the control itself */
-        bool value_on_knob() const;   /* value permanently rendered on the control */
 
-        juce::String format_value() const;
         juce::String format_ratio(double const r) const;
+        /* Badge caption: the source label uppercased and cropped to 3 chars so a
+         * long name (e.g. "Breath") never overhangs the neighbouring control. */
+        juce::String badge_text() const;
         void commit(double const new_ratio);
 
         double current_ratio() const;   /* value hooks aware */
@@ -251,12 +277,9 @@ class Control : public juce::Component, public juce::SettableTooltipClient
 
         /* Geometry (style-aware). */
         juce::Rectangle<float> knob_circle() const;   /* rotary + dot */
-        juce::Rectangle<float> track_rect() const;    /* sliders */
-        juce::Point<float> handle_at(double const visual) const;  /* sliders */
-        juce::Rectangle<float> badge_rect() const;
 
         /* Per-style painters. */
-        void paint_rotary(juce::Graphics& g, juce::Rectangle<int> const& value_area);
+        void paint_rotary(juce::Graphics& g);
         void paint_dot(juce::Graphics& g);
         void paint_slider(juce::Graphics& g);
 
@@ -306,6 +329,7 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         bool semitone_snap;
         bool compact;
         bool bare;
+        bool centred_badge;   /* badge to the right, vertically centred (see set_badge_centred) */
         bool hover;
 
         bool assigned;
