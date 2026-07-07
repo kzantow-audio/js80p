@@ -178,10 +178,10 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         /** True once a modulator is assigned to this control's parameter. */
         bool is_assigned() const { return assigned; }
 
-        /** The dial / track centre in this control's own coordinates — i.e.
+        /** The dial / track bounds in this control's own coordinates — i.e.
          *  excluding the caption strip. Used by the synth page to align its
-         *  signal-flow arrows with the MIX knob's circle. */
-        juce::Point<int> control_centre() const;
+         *  signal-flow arrows with a mix knob's circle (centre / bottom). */
+        juce::Rectangle<int> control_bounds() const;
 
         /** Vertical drag distance (px) that spans the full 0..1 range; shared
          *  with the other value controls so they all feel the same. */

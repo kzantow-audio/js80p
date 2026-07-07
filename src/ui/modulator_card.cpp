@@ -353,12 +353,23 @@ void ModulatorCard::resized()
     b.removeFromTop(16);   /* one-line header */
 
     if (type == Modulation::LFO) {
-        int const bh = 20;   /* WAVE/BPM height = one oscillator selector button */
+        /* The expanded 2-row shape picker fits within the space below the title
+         * (b) and is centred there - the cell height is reduced from the 32px
+         * button size if needed so both rows fit without covering the title, and
+         * the collapsed shape button matches that height. */
+        juce::Rectangle<int> const grid_area = getLocalBounds().withTrimmedLeft(2).reduced(3);
+        int const rows = WaveformSelector::ROWS;
+        int const shape_h = juce::jmin(32, (b.getHeight() - 4) / rows);
+        int const shape_w = grid_area.getWidth() / WaveformSelector::COLUMNS;
 
         if (lfo_expanded) {
-            /* Selector at the oscillator-button height (2 rows x 20px), not filling
-             * the card. */
-            shape_grid->setBounds(b.removeFromTop(2 * bh));
+            int const grid_h = rows * shape_h;
+            shape_grid->setBounds(
+                grid_area.getX(),
+                b.getY() + (b.getHeight() - grid_h) / 2,
+                grid_area.getWidth(),
+                grid_h
+            );
             shape_grid->setVisible(true);
             wave->setVisible(false);
             sync_button->setVisible(false);
@@ -370,22 +381,37 @@ void ModulatorCard::resized()
         wave->setVisible(true);
         sync_button->setVisible(true);
 
-        /* All four knobs (RATE | PHS | DIST | RAND) packed tightly against the
-         * right edge; the WAVE shape button fills the leftover space to their
-         * left, centred in it. */
+        /* Four knobs (RATE | PHS | DIST | RAND) with 2px more padding to the right
+         * of each, and the last one pulled in so it lines up with the envelope
+         * card's last knob (REL) - clearing the right edge and leaving room for
+         * its modulation badge. The envelope-row metrics are mirrored here to find
+         * REL's centre, so the two must stay in sync (see the envelope layout
+         * below). The WAVE shape button fills the leftover space to the left. */
         int const n = knobs.size();
-        int const cell = 52;   /* tight fixed knob cell, not stretched to fill */
-        int const knobs_x = b.getRight() - n * cell;
+        int const cell = 60;   /* fixed knob cell (8px more padding between knobs) */
+        int const gap = 2;     /* 2px more padding to the right of each knob */
+
+        int const e_cw = 16, e_sw = 26, e_sus_pad = 6;   /* mirror the envelope row */
+        int const e_kw = juce::jmax(28, (b.getWidth() - 3 * e_cw - e_sw - e_sus_pad) / 5);
+        int const e_total = 5 * e_kw + 3 * e_cw + e_sw + e_sus_pad;
+        int const e_x0 = b.getX() + juce::jmax(0, (b.getWidth() - e_total) / 2);
+        int const rel_centre = e_x0 + 4 * e_kw + 2 * e_cw + e_sw + e_sus_pad + e_kw / 2;
+
+        int const last_x = rel_centre - cell / 2;                  /* RAND aligned to REL */
+        int const knobs_x = last_x - (n - 1) * (cell + gap);
 
         for (int i = 0; i != n; ++i) {
             knobs[i]->setVisible(true);
-            knobs[i]->setBounds(knobs_x + i * cell, b.getY(), cell, b.getHeight());
+            knobs[i]->setBounds(knobs_x + i * (cell + gap), b.getY(), cell, b.getHeight());
         }
 
-        int const wave_w = 36;
-        int const wy = b.getY() + (b.getHeight() - bh) / 2;
+        /* Selected-shape button sized to match one expanded picker cell, so the
+         * display doesn't jump size when it collapses. Vertically centred on the
+         * knob row, in the space left of the knobs. */
+        int const wave_w = shape_w;
+        int const wy = b.getY() + (b.getHeight() - shape_h) / 2;
         int const wx = b.getX() + juce::jmax(0, (knobs_x - b.getX() - wave_w) / 2);
-        wave->setBounds(wx, wy, wave_w, bh);
+        wave->setBounds(wx, wy, wave_w, shape_h);
 
         /* BPM tempo-sync toggle lives in the title bar, centred over the RATE
          * knob, exactly like the CHORUS/ECHO BPM toggles over FREQ / DELAY. */
@@ -426,8 +452,11 @@ void ModulatorCard::resized()
 
     place_knob(0);    /* DLY */
     place_curve(0);   /* attack curve */
+    x -= 4;           /* tighter gap after the attack curve */
     place_knob(1);    /* ATK */
+    x += 2;           /* padding after ATK */
     place_knob(2);    /* HLD */
+    x += 2;           /* padding after HLD */
     place_knob(3);    /* DEC */
     place_curve(1);   /* decay curve */
     sus_fader->setBounds(x, b.getY(), sw, h);   /* SUS */

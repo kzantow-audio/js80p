@@ -130,9 +130,10 @@ void PerTypeEditor::resized()
     custom_group.setBounds(getLocalBounds());
 
     /* Pulse width: a single knob on the left, sized like the oscillator knobs
-     * (cell 72 high) rather than filling the whole per-type area. */
+     * (cell 58 high, matching lay_out_osc) rather than filling the whole per-type
+     * area, so its dial is the same 40px as the other oscillator knobs. */
     int const knob_w = juce::jmin(getWidth() / 4, 78);
-    pw_knob.setBounds(4, 0, knob_w, 72);
+    pw_knob.setBounds(4, 0, knob_w, 58);
 
     /* Custom harmonics: one bipolar bar per harmonic across the harmonics area,
      * each carrying its modulation badge below the bar. */

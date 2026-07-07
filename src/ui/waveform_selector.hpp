@@ -45,6 +45,11 @@ class WaveformSelector : public juce::Component
         static constexpr int SHAPE_COUNT = 14;
         static constexpr int CUSTOM = 13;
 
+        /* Grid shape of the expanded picker (used by ModulatorCard to size the
+         * collapsed selected-shape button to match one cell). */
+        static constexpr int COLUMNS = 7;
+        static constexpr int ROWS = 2;
+
         WaveformSelector(ParamBridge& bridge, Synth::ParamId const param_id);
 
         /** Collapsed mode: draw only the current shape as one button. */
@@ -61,9 +66,6 @@ class WaveformSelector : public juce::Component
         void mouseExit(juce::MouseEvent const& event) override;
 
     private:
-        static constexpr int COLUMNS = 7;
-        static constexpr int ROWS = 2;
-
         juce::Rectangle<int> cell_bounds(int const index) const;
         int index_at(juce::Point<int> const p) const;
         void update_name_popover();

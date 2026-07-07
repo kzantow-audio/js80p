@@ -873,10 +873,9 @@ juce::String Control::format_ratio(double const r) const
 
 /* ---- Geometry ---- */
 
-juce::Point<int> Control::control_centre() const
+juce::Rectangle<int> Control::control_bounds() const
 {
-    juce::Rectangle<float> const r = is_slider() ? track_rect() : knob_circle();
-    return r.getCentre().roundToInt();
+    return (is_slider() ? track_rect() : knob_circle()).toNearestInt();
 }
 
 

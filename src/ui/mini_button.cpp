@@ -34,7 +34,7 @@ namespace {
  * in whatever (taller) button height it is given, so enlarging the click target
  * does not enlarge the icon. Paired with generous horizontal padding on each side
  * of the glyph so the whole button is a large click target. */
-constexpr int ICON_GLYPH_H = 14;
+constexpr int ICON_GLYPH_H = 16;   /* ~110% of the original 14 (nearest even) */
 constexpr int ICON_H_PAD = 6;
 
 
@@ -144,7 +144,7 @@ int MiniButton::preferred_width() const
         return glyph_w + 2 * ICON_H_PAD;
     }
 
-    juce::Font const f(juce::FontOptions().withHeight(9.0f));
+    juce::Font const f(juce::FontOptions().withHeight(action ? 10.0f : 9.0f));
     float w = juce::GlyphArrangement::getStringWidth(f, label);
 
     for (juce::String const& s : option_labels) {
@@ -178,8 +178,12 @@ void MiniButton::paint(juce::Graphics& g)
      * colour, centred within a wide (padded) click target. */
     if (icon.isValid()) {
         if (hover) {
+            juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(0.5f);
             g.setColour(c.withAlpha(0.18f));
-            g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 2.0f);
+            g.fillRoundedRectangle(box, 2.0f);
+            /* Border only on hover (never shown otherwise). */
+            g.setColour(c);
+            g.drawRoundedRectangle(box, 2.0f, 1.0f);
         }
 
         float const glyph_h = (float)ICON_GLYPH_H;
@@ -220,9 +224,11 @@ void MiniButton::paint(juce::Graphics& g)
         text = option_labels[value];
     }
 
-    /* Solid fill needs dark text for contrast; the outline state keeps it orange. */
+    /* Solid fill needs dark text for contrast; the outline state keeps it orange.
+     * Header action buttons (INIT) render ~110% larger for readability; the
+     * effects-page param toggles stay at the original 9pt. */
     g.setColour(on ? Theme::BG : c);
-    g.setFont(9.0f);
+    g.setFont(action ? 10.0f : 9.0f);
     g.drawText(text, getLocalBounds(), juce::Justification::centred, false);
 }
 

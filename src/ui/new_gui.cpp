@@ -777,7 +777,7 @@ void NewGui::resized()
      * left to right. INIT is a slightly taller button; the icon buttons share its
      * height for a larger click target (their glyphs stay the same size, centred). */
     {
-        int const bh = 20;
+        int const bh = 22;   /* ~110% of the original 20 (nearest even) for readability */
         int const by = header_bounds.getCentreY() - bh / 2;
         int bx = header_bounds.getX() + 96;
 
@@ -898,7 +898,7 @@ void NewGui::lay_out_osc(
         PerTypeEditor* per_type
 ) {
     juce::Rectangle<int> inner = panel.reduced(10);
-    inner.removeFromTop(18);   /* title */
+    inner.removeFromTop(26);   /* title + 8px padding below it */
 
     if (wave != nullptr) {
         wave->setBounds(inner.removeFromTop(40));
@@ -1089,14 +1089,14 @@ void NewGui::paint(juce::Graphics& g)
 
     /* Signal-flow hint: two small right-pointing triangles in the mix column,
      * one hugging OSC 1 (flow into the mix knobs) and one hugging OSC 2 (flow
-     * out to the carrier). Vertically centred on the MIX knob's dial (its circle,
-     * excluding the caption above it) so they line up with the topmost control. */
+     * out to the carrier). Aligned with the bottom of the PM knob's dial (its
+     * circle, excluding the caption). */
     {
         float const h = 8.0f;
         float const w = h * 0.62f;
-        float const cy = mix.empty()
+        float const cy = mix.size() < 2
             ? (float)mix_bounds.getCentreY()
-            : (float)(mix[0]->getY() + mix[0]->control_centre().getY());
+            : (float)(mix[1]->getY() + mix[1]->control_bounds().getBottom());
         auto arrow = [&g, h, w, cy](float const cx) {
             juce::Path tri;
             tri.startNewSubPath(cx - w * 0.5f, cy - h * 0.5f);
