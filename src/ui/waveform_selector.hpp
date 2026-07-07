@@ -20,6 +20,7 @@
 #define JS80P__UI__WAVEFORM_SELECTOR_HPP
 
 #include <functional>
+#include <memory>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -27,6 +28,7 @@
 #include "synth.hpp"
 
 #include "ui/param_bridge.hpp"
+#include "ui/value_popover.hpp"
 
 
 namespace JS80P
@@ -54,12 +56,17 @@ class WaveformSelector : public juce::Component
 
         void paint(juce::Graphics& g) override;
         void mouseDown(juce::MouseEvent const& event) override;
+        void mouseMove(juce::MouseEvent const& event) override;
+        void mouseEnter(juce::MouseEvent const& event) override;
+        void mouseExit(juce::MouseEvent const& event) override;
 
     private:
         static constexpr int COLUMNS = 7;
         static constexpr int ROWS = 2;
 
         juce::Rectangle<int> cell_bounds(int const index) const;
+        int index_at(juce::Point<int> const p) const;
+        void update_name_popover();
         void draw_glyph(
             juce::Graphics& g, juce::Rectangle<float> area, int const shape
         ) const;
@@ -69,6 +76,8 @@ class WaveformSelector : public juce::Component
         int selected;
         int count;
         bool single;
+        int hovered { -1 };
+        std::unique_ptr<ValuePopover> name_popover;
         std::function<void()> on_click;
         std::function<void(int)> on_select;
 

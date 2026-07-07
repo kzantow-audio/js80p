@@ -43,6 +43,8 @@ namespace Theme
     inline juce::Colour const ACCENT      { 0xffeab364 };
     inline juce::Colour const TRACK       { 0xff34343f };
 
+    inline juce::Colour const SHADOW      { 0xff000000 };
+
     /* Modulation source colours (by type). */
     inline juce::Colour const ENV         { 0xff5bc79a };
     inline juce::Colour const LFO         { 0xff5a9fe6 };

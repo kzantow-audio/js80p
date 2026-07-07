@@ -55,6 +55,12 @@ static bool waveform_is_soft(int const shape)
 }
 
 
+static char const* const WAVEFORM_NAMES[WaveformSelector::SHAPE_COUNT] = {
+    "Sine", "Saw", "Soft Saw", "Inv Saw", "Soft Inv Saw", "Triangle", "Soft Triangle",
+    "Square", "Soft Square", "Pulse", "Soft Pulse", "Bipolar", "Soft Bipolar", "Custom"
+};
+
+
 WaveformSelector::WaveformSelector(
         ParamBridge& bridge, Synth::ParamId const param_id
 ) : bridge(bridge),
@@ -166,9 +172,7 @@ void WaveformSelector::mouseDown(juce::MouseEvent const& event)
         return;
     }
 
-    int const col = event.x / juce::jmax(1, getWidth() / COLUMNS);
-    int const row = event.y / juce::jmax(1, getHeight() / ROWS);
-    int const index = row * COLUMNS + col;
+    int const index = index_at(event.getPosition());
 
     if (index >= 0 && index < count) {
         selected = index;
@@ -179,6 +183,55 @@ void WaveformSelector::mouseDown(juce::MouseEvent const& event)
             on_select(index);
         }
     }
+}
+
+
+int WaveformSelector::index_at(juce::Point<int> const p) const
+{
+    if (single) {
+        return selected;
+    }
+
+    int const col = p.x / juce::jmax(1, getWidth() / COLUMNS);
+    int const row = p.y / juce::jmax(1, getHeight() / ROWS);
+    int const index = row * COLUMNS + col;
+    return (index >= 0 && index < count) ? index : -1;
+}
+
+
+void WaveformSelector::update_name_popover()
+{
+    if (hovered < 0 || hovered >= SHAPE_COUNT) {
+        ValuePopover::hide(name_popover);
+        return;
+    }
+
+    juce::Rectangle<int> const anchor = single ? getLocalBounds() : cell_bounds(hovered);
+    ValuePopover::show(name_popover, *this, anchor, {}, WAVEFORM_NAMES[hovered], Theme::ACCENT);
+}
+
+
+void WaveformSelector::mouseMove(juce::MouseEvent const& event)
+{
+    int const index = index_at(event.getPosition());
+    if (index != hovered) {
+        hovered = index;
+        update_name_popover();
+    }
+}
+
+
+void WaveformSelector::mouseEnter(juce::MouseEvent const& event)
+{
+    hovered = index_at(event.getPosition());
+    update_name_popover();
+}
+
+
+void WaveformSelector::mouseExit(juce::MouseEvent const& /* event */)
+{
+    hovered = -1;
+    ValuePopover::hide(name_popover);
 }
 
 }

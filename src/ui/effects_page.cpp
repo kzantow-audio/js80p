@@ -38,6 +38,9 @@ static constexpr int MED_H   = 65;
 static constexpr int TITLE_H = 22;
 static constexpr int PANEL_PAD = 8;
 static constexpr int PANEL_GAP = 6;
+/* Gap between adjacent knob cells so a knob's modulation badge (top-right of the
+ * dial) has room and does not overlap the next cell. */
+static constexpr int CELL_GAP = 8;
 
 
 EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
@@ -82,7 +85,6 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     /* Row 1 - CHORUS (left) and TAPE (right) share a single row. WIDTH is a
      * large knob kept in its natural place, right after the TYPE selector. */
     int const chorus = begin_panel("CHORUS", 1);
-    add_mix(chorus, P::ECWET, P::ECDRY);
     add_large(chorus, { { P::ECFRQ, "FREQ" }, { P::ECDPT, "DEPTH" } });
     add_medium(chorus, { { P::ECDEL, "DELAY" }, { P::ECFB, "FB" }, { P::ECTYP, "TYPE" } });
     add_large(chorus, { { P::ECWID, "WIDTH" } });
@@ -107,7 +109,6 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
     /* Row 2 - ECHO. REV 1 / REV 2 / SC MODE move to title buttons. WIDTH is a
      * large knob kept right after DIST. */
     int const echo = begin_panel("ECHO", 2);
-    add_mix(echo, P::EEWET, P::EEDRY);
     add_large(echo, { { P::EEDEL, "DELAY" }, { P::EEFB, "FB" } });
     add_medium(echo, { { P::EEINV, "IN" }, { P::EEDST, "DIST" } });
     add_large(echo, { { P::EEWID, "WIDTH" } });
@@ -127,17 +128,18 @@ EffectsPage::EffectsPage(ParamBridge& bridge, ModulationManager& manager)
 
     /* Row 3 - REVERB. WIDTH is a large knob kept right after DIST. */
     int const reverb = begin_panel("REVERB", 3);
-    add_mix(reverb, P::ERWET, P::ERDRY);
     add_large(reverb, { { P::ERRS, "SIZE" }, { P::ERRR, "REFL" } });
     add_medium(reverb, { { P::ERTYP, "TYPE" }, { P::ERDST, "DIST" } });
     add_large(reverb, { { P::ERWID, "WIDTH" } });
     add_medium(reverb, {
-        { P::ERCM, "SC MODE" },
         { P::ERDF, "DAMP F" }, { P::ERDG, "DAMP G" },
         { P::ERHPF, "HPF" }, { P::ERHPQ, "HP Q" },
         { P::ERCTH, "SC TH" }, { P::ERCAT, "SC AT" },
         { P::ERCRL, "SC RL" }, { P::ERCR, "SC R" }
     });
+    /* Side-chain mode toggle, centred over the side-chain group's lead knob,
+     * matching the ECHO panel. */
+    add_button(reverb, P::ERCM, "SC", P::ERCTH)->set_option_labels({ "COMP", "EXPD" });
 }
 
 
@@ -308,6 +310,9 @@ juce::Point<int> EffectsPage::panel_size(Panel const& p) const
     for (Cell const& c : p.cells) {
         inner += c.medium ? MED_W : LARGE_W;
     }
+    if (!p.cells.empty()) {
+        inner += CELL_GAP * ((int)p.cells.size() - 1);
+    }
 
     return juce::Point<int>(
         inner + 2 * PANEL_PAD, TITLE_H + KNOB_H + PANEL_PAD
@@ -327,13 +332,13 @@ void EffectsPage::place_panel(Panel& panel)
     for (Cell const& cell : panel.cells) {
         if (cell.medium) {
             cell.knob->setBounds(x, med_y, MED_W, MED_H);
-            x += MED_W;
+            x += MED_W + CELL_GAP;
         } else if (cell.mix != nullptr) {
             cell.mix->setBounds(x, inner_y, LARGE_W, KNOB_H);
-            x += LARGE_W;
+            x += LARGE_W + CELL_GAP;
         } else {
             cell.knob->setBounds(x, inner_y, LARGE_W, KNOB_H);
-            x += LARGE_W;
+            x += LARGE_W + CELL_GAP;
         }
     }
 

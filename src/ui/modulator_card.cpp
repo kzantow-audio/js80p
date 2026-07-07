@@ -113,6 +113,12 @@ ModulatorCard::ModulatorCard(
             [](double const v) { return juce::String(v, 2); }
         );
         sus_fader->set_hook_default(def_fraction);
+        /* SUS is a macro-modulation destination like the other envelope params;
+         * once assigned it edits env_sus directly (the fraction hook and the
+         * periodic write_sustain step aside — see refresh / write_sustain). */
+        sus_fader->set_manager(&manager);
+        sus_fader->set_mod_caps(Modulation::CAP_MACRO);
+        sus_fader->set_mirrors(mirror(Modulation::env_sus));
         addAndMakeVisible(*sus_fader);
 
         /* SCL lives in the middle of the header row (not among the knobs): a
@@ -141,17 +147,19 @@ ModulatorCard::ModulatorCard(
         /* Two tiny pie dots in the header's far-right band: time inaccuracy and
          * level inaccuracy, mirrored onto every grouped member. */
         tin_dot = std::make_unique<Control>(
-            bridge, Modulation::env_tin(rep), juce::String(),
+            bridge, Modulation::env_tin(rep), "Time inacc.",
             Control::Style::DOT, Control::Size::TINY
         );
+        tin_dot->set_value_display(Control::ValueDisplay::POPOVER);
         tin_dot->set_value_mirrors(mirror(Modulation::env_tin));
         tin_dot->setTooltip("Envelope time inaccuracy");
         addAndMakeVisible(*tin_dot);
 
         vin_dot = std::make_unique<Control>(
-            bridge, Modulation::env_vin(rep), juce::String(),
+            bridge, Modulation::env_vin(rep), "Level inacc.",
             Control::Style::DOT, Control::Size::TINY
         );
+        vin_dot->set_value_display(Control::ValueDisplay::POPOVER);
         vin_dot->set_value_mirrors(mirror(Modulation::env_vin));
         vin_dot->setTooltip("Envelope level inaccuracy");
         addAndMakeVisible(*vin_dot);
@@ -267,7 +275,11 @@ void ModulatorCard::propagate()
 void ModulatorCard::refresh()
 {
     if (sus_fader != nullptr) {
-        write_sustain();   /* keep SUS tracking the fraction as min/max change */
+        /* Track the fraction as min/max change, unless a modulator now owns
+         * env_sus (then it must not be overwritten every frame). */
+        if (!sus_fader->is_assigned()) {
+            write_sustain();
+        }
         sus_fader->refresh();
     }
 

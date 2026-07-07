@@ -24,6 +24,7 @@
 #include "ui/control.hpp"
 
 #include "ui/theme.hpp"
+#include "ui/value_popover.hpp"
 
 
 namespace JS80P
@@ -35,6 +36,11 @@ static constexpr float END_ANGLE = juce::MathConstants<float>::pi * 2.8f;
 static constexpr int STRIP = 14;          /* caption / value strip height */
 static constexpr int LEFT_GUTTER = 34;    /* left-caption gutter width */
 static constexpr float BADGE_H = 12.0f;   /* modulation badge / slider handle size */
+
+/* The oscillator section's dial box (cell 72 high, less the 14+14 caption/value
+ * strips): macro cells reserve no strips, so their dial is capped to this to read
+ * at the same size as an oscillator knob. */
+static constexpr int OSC_DIAL_BOX = 40;
 
 /* Global sources assignable through an intermediate macro (label + ControllerId). */
 static struct { char const* name; int id; } const CONTROL_SOURCES[] = {
@@ -108,6 +114,7 @@ class ModBadge : public juce::Component
             drag_start_depth = owner.depth;
             owner.dragging_depth = true;
             owner.repaint();
+            owner.update_popover();
             repaint();
         }
 
@@ -123,6 +130,7 @@ class ModBadge : public juce::Component
             double const raw = drag_start_depth
                 - (double)event.getDistanceFromDragStartY() / sensitivity;
             owner.apply_depth(owner.snap_depth(raw, drag_start_depth, fine));
+            owner.update_popover();
         }
 
         void mouseUp(juce::MouseEvent const& /* event */) override
@@ -130,6 +138,7 @@ class ModBadge : public juce::Component
             dragging = false;
             owner.dragging_depth = false;
             owner.repaint();
+            owner.update_popover();
             repaint();
         }
 
@@ -274,7 +283,9 @@ void Control::set_value_hooks(
 void Control::set_hook_default(double const d) { hook_default = juce::jlimit(0.0, 1.0, d); }
 
 
-float Control::font_size() const { return compact || size_tier == Size::TINY ? 9.0f : 11.0f; }
+/* One text size for every control's caption and value readout: the oscillator
+ * knob size. Size tiers scale the dial/track, not the text. */
+float Control::font_size() const { return 11.0f; }
 int Control::strip_h() const { return STRIP; }
 
 
@@ -519,7 +530,12 @@ void Control::update_badge()
         badge->toFront(false);
     }
 
-    juce::Rectangle<float> const br = badge_rect();
+    /* The empty placeholder box is 2px smaller in both dimensions so its outline
+     * border sits inside the space an assigned (filled) badge would occupy. */
+    juce::Rectangle<float> br = badge_rect();
+    if (!assigned) {
+        br = br.reduced(1.0f);
+    }
     badge->setBounds(
         getX() + juce::roundToInt(br.getX()),
         getY() + juce::roundToInt(br.getY()),
@@ -527,6 +543,121 @@ void Control::update_badge()
         juce::roundToInt(br.getHeight())
     );
     badge->setVisible(true);
+}
+
+
+bool Control::title_on_knob() const
+{
+    return label_pos != LabelPos::NONE && label.isNotEmpty();
+}
+
+
+bool Control::value_on_knob() const
+{
+    return value_display == ValueDisplay::ALWAYS;
+}
+
+
+bool Control::popover_shown() const
+{
+    if (editor != nullptr) {
+        return true;   /* the edit bubble reuses the popover as its container */
+    }
+
+    /* The popover exists to surface whatever the knob itself does not already
+     * show: the title, the value, or both. When the knob shows both there is
+     * nothing to add, so no popover. Otherwise it appears on hover and drag. */
+    if (title_on_knob() && value_on_knob()) {
+        return false;
+    }
+
+    return hover || dragging || dragging_depth;
+}
+
+
+void Control::update_popover()
+{
+    /* The popover lives on the top-level component, not the immediate parent, so
+     * it can float above a control's title even when that control sits in a thin
+     * strip / header row that would otherwise clip it. */
+    juce::Component* const top = getTopLevelComponent();
+    bool const show = popover_shown() && top != nullptr && top != this && isVisible();
+
+    if (!show) {
+        if (popover != nullptr) {
+            popover->setVisible(false);
+        }
+        return;
+    }
+
+    bool const editing = editor != nullptr;
+
+    double const shown = assigned
+        ? (dragging_depth
+            ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth)) : base)
+        : current_ratio();
+
+    /* Carry the title into the popover only when the knob itself does not show
+     * one (e.g. the inaccuracy dots, or any control being edited without a
+     * visible caption). */
+    bool const include_title = !title_on_knob() && label.isNotEmpty();
+
+    if (popover == nullptr) {
+        popover = std::make_unique<ValuePopover>();
+    }
+    popover->set_content(
+        include_title ? label : juce::String(),
+        editing ? juce::String() : format_ratio(shown),
+        assigned ? mod_colour : accent()
+    );
+    popover->set_editing(editing);
+
+    /* Anchor (in this control's coordinates): above the modulator badge while
+     * dragging the amount; otherwise above the title (so it never covers it)
+     * when one shows on top, else above the dial / track. */
+    float centre_x;
+    float top_ref;
+    if (dragging_depth && badge_shown()) {
+        juce::Rectangle<float> const br = badge_rect();
+        centre_x = br.getCentreX();
+        top_ref = br.getY();
+    } else {
+        juce::Rectangle<float> const el = is_slider() ? track_rect() : knob_circle();
+        centre_x = el.getCentreX();
+        top_ref = label_pos == LabelPos::TOP ? (float)label_strip().getY() : el.getY();
+    }
+
+    /* Convert the anchor into top-level coordinates and place the bubble there. */
+    juce::Point<int> const anchor = top->getLocalPoint(
+        this, juce::Point<int>(juce::roundToInt(centre_x), juce::roundToInt(top_ref))
+    );
+
+    juce::Rectangle<int> box = popover->measure();
+    if (editing) {
+        box.setWidth(juce::jmax(box.getWidth(), 56));   /* room to type */
+    }
+    int const w = box.getWidth();
+    int const h = box.getHeight();
+    int px = juce::jlimit(0, juce::jmax(0, top->getWidth() - w), anchor.x - w / 2);
+    int py = juce::jmax(0, anchor.y - 2 - h);
+
+    if (popover->getParentComponent() != top) {
+        top->addChildComponent(popover.get());
+    }
+    popover->set_arrow_x((float)(anchor.x - px));
+    popover->setBounds(px, py, w, h);
+    popover->toFront(false);
+    popover->setVisible(true);
+    popover->repaint();
+
+    /* Host the text editor inside the popover's value line while editing. */
+    if (editing) {
+        if (editor->getParentComponent() != popover.get()) {
+            popover->addAndMakeVisible(*editor);
+        }
+        editor->setBounds(popover->value_area());
+        editor->toFront(true);
+    }
 }
 
 
@@ -611,6 +742,7 @@ void Control::refresh()
     }
 
     update_badge();
+    update_popover();
 }
 
 
@@ -636,18 +768,27 @@ juce::String Control::format_ratio(double const r) const
 
     double const value = bridge.display_value(param_id, r);
 
+    /* Stepped values read as a whole number when they land exactly on a step
+     * (e.g. the pitch knobs show "0" / "12", not "0.000"); otherwise fall through
+     * to three decimals. */
     if (semitone_snap) {
         double const semitones = value / 100.0;
         return std::fabs(semitones - std::round(semitones)) < 0.005
             ? juce::String((int)std::round(semitones))
-            : juce::String(semitones, 2);
+            : juce::String(semitones, 3);
     }
 
-    int const decimals = bridge.is_discrete(param_id)
-        ? 0
-        : (std::fabs(value) >= 100.0 ? 0 : (std::fabs(value) >= 10.0 ? 1 : 2));
+    if (bridge.is_discrete(param_id)) {
+        return juce::String((int)std::round(value));
+    }
 
-    return juce::String(value, decimals);
+    /* Continuous values always show three decimals; very large readouts (e.g. a
+     * frequency in Hz) drop them to stay legible. */
+    if (std::fabs(value) >= 1000.0) {
+        return juce::String((int)std::round(value));
+    }
+
+    return juce::String(value, 3);
 }
 
 
@@ -714,7 +855,10 @@ juce::Rectangle<float> Control::knob_circle() const
     }
 
     juce::Rectangle<int> const b = body_bounds();
-    float const size = (float)juce::jmin(b.getWidth(), b.getHeight());
+    float size = (float)juce::jmin(b.getWidth(), b.getHeight());
+    if (macro_mode) {
+        size = juce::jmin(size, (float)OSC_DIAL_BOX);   /* match the oscillator dial */
+    }
     return b.toFloat().withSizeKeepingCentre(size, size).reduced(3.0f);
 }
 
@@ -723,18 +867,21 @@ juce::Rectangle<float> Control::track_rect() const
 {
     juce::Rectangle<float> b = body_bounds().toFloat();
 
+    /* The groove is 2px thinner than the badge. */
+    float const thickness = BADGE_H - 2.0f;
+
     if (style == Style::H_SLIDER) {
-        /* A horizontal groove as tall as the badge, leaving room at the right
-         * end for the badge/handle. */
-        b = b.withSizeKeepingCentre(b.getWidth(), BADGE_H);
+        /* A horizontal groove, leaving extra room at the right end so the badge
+         * (modulation box) does not overlap the track. */
+        b = b.withSizeKeepingCentre(b.getWidth(), thickness);
         if (badge_shown()) {
-            b.removeFromRight(BADGE_H + 4.0f);
+            b.removeFromRight(BADGE_H + 8.0f);
         }
         return b;
     }
 
-    /* V_SLIDER: a vertical groove as wide as the badge, room at the top. */
-    b = b.withSizeKeepingCentre(BADGE_H, b.getHeight());
+    /* V_SLIDER: a vertical groove, room at the top for the badge. */
+    b = b.withSizeKeepingCentre(thickness, b.getHeight());
     if (badge_shown()) {
         b.removeFromTop(BADGE_H + 4.0f);
     }
@@ -764,8 +911,9 @@ juce::Rectangle<float> Control::badge_rect() const
     float const h = BADGE_H;
 
     if (style == Style::H_SLIDER) {
-        juce::Rectangle<float> const t = body_bounds().toFloat();
-        return juce::Rectangle<float>(t.getRight() - w, t.getCentreY() - h * 0.5f, w, h);
+        /* Anchored 4px to the right of the track, growing rightward. */
+        juce::Rectangle<float> const t = track_rect();
+        return juce::Rectangle<float>(t.getRight() + 4.0f, t.getCentreY() - h * 0.5f, w, h);
     }
 
     if (style == Style::V_SLIDER) {
@@ -793,8 +941,11 @@ void Control::paint(juce::Graphics& g)
     if (label_pos != LabelPos::NONE && !label.isEmpty()) {
         g.setColour(Theme::TEXT_DIM);
         g.setFont(font_size());
+        /* LEFT captions keep a 4px gap from the dial / track. */
+        juce::Rectangle<int> strip = label_pos == LabelPos::LEFT
+            ? label_strip().withTrimmedRight(4) : label_strip();
         g.drawText(
-            label, label_strip(),
+            label, strip,
             label_pos == LabelPos::LEFT ? juce::Justification::centredRight
                                         : juce::Justification::centred,
             false
@@ -807,10 +958,6 @@ void Control::paint(juce::Graphics& g)
         paint_slider(g);
     } else {
         paint_rotary(g, value_strip());
-    }
-
-    if (value_display == ValueDisplay::POPOVER && (hover || dragging || dragging_depth)) {
-        paint_value_popover(g);
     }
 }
 
@@ -955,27 +1102,24 @@ void Control::paint_slider(juce::Graphics& g)
         g.fillRoundedRectangle(juce::Rectangle<float>(t.getX() - 1.5f, h.y - 1.5f, t.getWidth() + 3.0f, 3.0f), 1.5f);
     }
 
-    /* Modulation reach: a fill between the handle and the mod line at
-     * base + depth, capped by a bright perpendicular line. */
+    /* Modulation reach: a thin 2px line running from the base handle to the mod
+     * target along the slider's axis, with a 4px circle marking the target. */
     if (assigned) {
         double const target = juce::jlimit(0.0, 1.0, position + depth);
         juce::Point<float> const m = handle_at(target);
+        g.setColour(active);
 
         if (style == Style::H_SLIDER) {
             float const x0 = juce::jmin(h.x, m.x);
             float const x1 = juce::jmax(h.x, m.x);
-            g.setColour(active.withAlpha(0.30f));
-            g.fillRect(juce::Rectangle<float>(x0, t.getY(), x1 - x0, t.getHeight()));
-            g.setColour(active);
-            g.fillRect(juce::Rectangle<float>(m.x - 1.0f, t.getY() - 2.0f, 2.0f, t.getHeight() + 4.0f));
+            g.fillRect(juce::Rectangle<float>(x0, t.getCentreY() - 1.0f, x1 - x0, 2.0f));
         } else {
             float const y0 = juce::jmin(h.y, m.y);
             float const y1 = juce::jmax(h.y, m.y);
-            g.setColour(active.withAlpha(0.30f));
-            g.fillRect(juce::Rectangle<float>(t.getX(), y0, t.getWidth(), y1 - y0));
-            g.setColour(active);
-            g.fillRect(juce::Rectangle<float>(t.getX() - 2.0f, m.y - 1.0f, t.getWidth() + 4.0f, 2.0f));
+            g.fillRect(juce::Rectangle<float>(t.getCentreX() - 1.0f, y0, 2.0f, y1 - y0));
         }
+
+        g.fillEllipse(m.x - 2.0f, m.y - 2.0f, 4.0f, 4.0f);
     }
 
     /* Value readout. */
@@ -988,45 +1132,6 @@ void Control::paint_slider(juce::Graphics& g)
         g.setFont(font_size());
         g.drawText(format_ratio(shown), value_strip(), juce::Justification::centred, false);
     }
-}
-
-
-void Control::paint_value_popover(juce::Graphics& g)
-{
-    if (editor != nullptr) {
-        return;   /* the text editor replaces the popover while it is open */
-    }
-
-    double const shown = assigned
-        ? (dragging_depth
-            ? visual_to_ratio(juce::jlimit(0.0, 1.0, ratio_to_visual(base) + depth)) : base)
-        : current_ratio();
-    juce::String const txt = format_ratio(shown);
-
-    juce::Font const f(juce::FontOptions().withHeight(11.0f).withStyle("Bold"));
-    float const w = juce::jmax(24.0f, juce::GlyphArrangement::getStringWidth(f, txt) + 12.0f);
-    float const h = 16.0f;
-
-    /* Anchor above the badge (if any) or the dial/track top-centre. */
-    juce::Rectangle<float> const anchor = badge_shown() ? badge_rect() : knob_circle();
-    float const x = juce::jlimit(0.0f, (float)juce::jmax(0, getWidth()) - w, anchor.getCentreX() - w * 0.5f);
-    float const y = juce::jmax(0.0f, anchor.getY() - h - 4.0f);
-    juce::Rectangle<float> const bubble(x, y, w, h);
-
-    g.setColour(Theme::PANEL_2.withAlpha(0.96f));
-    g.fillRoundedRectangle(bubble, 3.0f);
-    g.setColour(assigned ? mod_colour : accent());
-    g.drawRoundedRectangle(bubble, 3.0f, 1.0f);
-
-    /* Little downward arrow toward the anchor. */
-    juce::Path arrow;
-    float const ax = juce::jlimit(bubble.getX() + 4.0f, bubble.getRight() - 4.0f, anchor.getCentreX());
-    arrow.addTriangle(ax - 3.0f, bubble.getBottom(), ax + 3.0f, bubble.getBottom(), ax, bubble.getBottom() + 4.0f);
-    g.fillPath(arrow);
-
-    g.setColour(Theme::TEXT);
-    g.setFont(f);
-    g.drawText(txt, bubble, juce::Justification::centred, false);
 }
 
 
@@ -1264,6 +1369,8 @@ void Control::mouseDown(juce::MouseEvent const& event)
         dragging_depth = false;
         drag_start_visual = ratio_to_visual(assigned ? base : current_ratio());
     }
+
+    update_popover();
 }
 
 
@@ -1276,14 +1383,17 @@ void Control::mouseDrag(juce::MouseEvent const& event)
     bool const fine = event.mods.isCtrlDown();
     double const sensitivity = fine ? DRAG_PIXELS_FULL_RANGE * 5.0 : DRAG_PIXELS_FULL_RANGE;
 
-    /* Horizontal sliders track the X axis; everything else the (inverted) Y. */
+    /* Horizontal sliders add their X travel to the (inverted) Y travel, so they
+     * respond to both axes: drag right or up to increase, down to decrease, just
+     * like a vertical slider or knob. Everything else tracks the inverted Y. */
     double const travel = style == Style::H_SLIDER
-        ? (double)event.getDistanceFromDragStartX()
+        ? (double)(event.getDistanceFromDragStartX() - event.getDistanceFromDragStartY())
         : -(double)event.getDistanceFromDragStartY();
     double const delta = travel / sensitivity;
 
     if (dragging_depth) {
         apply_depth(snap_depth(drag_start_depth + delta, drag_start_depth, fine));
+        update_popover();
         return;
     }
 
@@ -1296,6 +1406,8 @@ void Control::mouseDrag(juce::MouseEvent const& event)
     } else {
         commit(new_ratio);
     }
+
+    update_popover();
 }
 
 
@@ -1304,6 +1416,7 @@ void Control::mouseUp(juce::MouseEvent const& /* event */)
     bool const was_depth = dragging_depth;
     dragging = false;
     dragging_depth = false;
+    update_popover();
 
     if (was_depth) {
         repaint();   /* revert the below-knob readout from amount to line value */
@@ -1334,18 +1447,14 @@ void Control::mouseDoubleClick(juce::MouseEvent const& event)
 void Control::mouseEnter(juce::MouseEvent const& /* event */)
 {
     hover = true;
-    if (value_display == ValueDisplay::POPOVER) {
-        repaint();
-    }
+    update_popover();
 }
 
 
 void Control::mouseExit(juce::MouseEvent const& /* event */)
 {
     hover = false;
-    if (value_display == ValueDisplay::POPOVER) {
-        repaint();
-    }
+    update_popover();
 }
 
 
@@ -1393,42 +1502,51 @@ void Control::open_value_editor()
     editor->setWantsKeyboardFocus(true);
     editor->setMultiLine(false);
     editor->setJustification(juce::Justification::centred);
-    editor->setBorder(juce::BorderSize<int>(1));
-    editor->setColour(juce::TextEditor::backgroundColourId, Theme::PANEL_2);
+    editor->setBorder(juce::BorderSize<int>(0));
+    editor->setColour(juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
+    editor->setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+    editor->setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
     editor->setColour(juce::TextEditor::textColourId, Theme::TEXT);
-    editor->setColour(juce::TextEditor::outlineColourId, assigned ? mod_colour : accent());
-    editor->setColour(juce::TextEditor::focusedOutlineColourId, assigned ? mod_colour : accent());
+    editor->setFont(ValuePopover::value_font());
 
     double const shown = assigned ? base : current_ratio();
     editor->setText(juce::String(bridge.display_value(param_id, shown),
                                  bridge.is_discrete(param_id) ? 0 : 3), false);
 
     Control* const self = this;
-    editor->onReturnKey = [self]() { self->commit_editor(); };
-    editor->onEscapeKey = [self]() { self->editor.reset(); self->repaint(); };
-    editor->onFocusLost = [self]() { self->commit_editor(); };
+    editor->onReturnKey = [self]() { self->close_editor(true); };
+    editor->onEscapeKey = [self]() { self->close_editor(false); };
+    editor->onFocusLost = [self]() { self->close_editor(true); };
 
-    addAndMakeVisible(*editor);
-    resized();
+    /* update_popover() hosts the editor inside the popover bubble (positioned like
+     * the value readout) and shows the title above it when the knob has none. */
+    update_popover();
     editor->grabKeyboardFocus();
     editor->selectAll();
     repaint();
 }
 
 
-void Control::commit_editor()
+void Control::close_editor(bool const apply)
 {
     if (editor == nullptr) {
         return;
     }
 
     juce::String const text = editor->getText().trim();
-    editor.reset();
 
-    if (text.isNotEmpty()) {
-        double const target = text.getDoubleValue();
-        double const new_ratio = ratio_for_display(target);
+    /* Detach ownership and callbacks *before* applying / deleting, so the focus-
+     * loss triggered by teardown cannot re-enter this path (the ESC / return /
+     * focus-lost handlers all funnel here). The editor is deleted asynchronously
+     * because destroying a component from within its own callback crashes. */
+    std::unique_ptr<juce::TextEditor> dead = std::move(editor);
+    dead->onReturnKey = nullptr;
+    dead->onEscapeKey = nullptr;
+    dead->onFocusLost = nullptr;
+    dead->setVisible(false);
 
+    if (apply && text.isNotEmpty()) {
+        double const new_ratio = ratio_for_display(text.getDoubleValue());
         if (assigned) {
             apply_base(new_ratio);
         } else {
@@ -1436,6 +1554,10 @@ void Control::commit_editor()
         }
     }
 
+    juce::TextEditor* const raw = dead.release();
+    juce::MessageManager::callAsync([raw]() { delete raw; });
+
+    update_popover();
     repaint();
 }
 
@@ -1443,23 +1565,17 @@ void Control::commit_editor()
 void Control::resized()
 {
     if (sub_control != nullptr) {
-        /* Anchored at the dial's bottom-right (rotary) or the track end. */
+        /* Anchored at the dial's bottom-right (rotary) or the track end, clear of
+         * the modulation reach ring / badge. */
         int const sz = 16;
         juce::Rectangle<float> const kb = is_slider() ? track_rect() : knob_circle();
-        int const x = juce::roundToInt(kb.getRight()) + 3;
+        int const x = juce::roundToInt(kb.getRight()) + 8;
         int const y = juce::roundToInt(kb.getBottom()) - sz;
         sub_control->setBounds(x, y, sz, sz);
     }
 
-    if (editor != nullptr) {
-        juce::Rectangle<float> const anchor = badge_shown() ? badge_rect() : knob_circle();
-        int const w = juce::jmax(36, (int)anchor.getWidth() + 20);
-        int const h = 18;
-        int const x = juce::jlimit(0, juce::jmax(0, getWidth() - w),
-                                   (int)anchor.getCentreX() - w / 2);
-        int const y = juce::jmax(0, (int)anchor.getY() - h - 2);
-        editor->setBounds(x, y, w, h);
-    }
+    /* The text editor is positioned by update_popover() (it lives in the popover
+     * bubble), so nothing to place here. */
 }
 
 }

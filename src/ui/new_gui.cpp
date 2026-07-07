@@ -86,11 +86,20 @@ NewGui::NewGui(Synth& synth)
     /* Global effect output volume, promoted to a header knob (right of the
      * tabs). Bare dial with the OUT caption drawn to its left; a macro-
      * modulation destination like the other effect volumes. */
-    out_knob = std::make_unique<Knob>(bridge, Synth::ParamId::EV3V, "OUT");
+    out_knob = std::make_unique<Knob>(
+        bridge, Synth::ParamId::EV3V, "OUT", Control::Style::ROTARY, Control::Size::SMALL
+    );
     out_knob->set_manager(&manager);
     out_knob->set_mod_caps(Modulation::CAP_MACRO);
     out_knob->set_bare(true);
+    out_knob->set_source_placeholder(true);   /* always show an (empty) modulation box */
     addAndMakeVisible(*out_knob);
+
+    /* Per-effect WET/DRY MIX knobs live in the header (they used to sit at the
+     * front of each effect panel and made the CHORUS/TAPE row too wide). */
+    add_header_mix(Synth::ParamId::ECWET, Synth::ParamId::ECDRY, "CHO");
+    add_header_mix(Synth::ParamId::EEWET, Synth::ParamId::EEDRY, "ECH");
+    add_header_mix(Synth::ParamId::ERWET, Synth::ParamId::ERDRY, "REV");
 
     /* The EFFECTS page shares the body area; hidden until its tab is active. */
     addChildComponent(effects_page);
@@ -120,8 +129,8 @@ NewGui::NewGui(Synth& synth)
     addAndMakeVisible(osc1_type);
 
     /* Osc 1 (modulator) inaccuracy + instability dots. */
-    osc1_inacc = add_dot(Synth::ParamId::MOIA, "Oscillator inaccuracy");
-    osc1_instab = add_dot(Synth::ParamId::MOIS, "Oscillator instability");
+    osc1_inacc = add_dot(Synth::ParamId::MOIA, "Inaccuracy", "Oscillator inaccuracy");
+    osc1_instab = add_dot(Synth::ParamId::MOIS, "Instability", "Oscillator instability");
 
     /* Mix column. */
     mode_selector = add_selector(Synth::ParamId::MODE, MODES, "MODE");
@@ -165,8 +174,8 @@ NewGui::NewGui(Synth& synth)
     addAndMakeVisible(osc2_type);
 
     /* Osc 2 (carrier) inaccuracy + instability dots. */
-    osc2_inacc = add_dot(Synth::ParamId::COIA, "Oscillator inaccuracy");
-    osc2_instab = add_dot(Synth::ParamId::COIS, "Oscillator instability");
+    osc2_inacc = add_dot(Synth::ParamId::COIA, "Inaccuracy", "Oscillator inaccuracy");
+    osc2_instab = add_dot(Synth::ParamId::COIS, "Instability", "Oscillator instability");
 
     /* Apply the initial page's visibility (synth children start visible). */
     if (active_page != Page::SYNTH) {
@@ -199,16 +208,60 @@ Knob& NewGui::add_knob(
 }
 
 
-Control* NewGui::add_dot(Synth::ParamId const id, char const* const tooltip)
+Control* NewGui::add_dot(Synth::ParamId const id, char const* const title, char const* const tooltip)
 {
+    /* The dot renders no caption or value, but carries its title so the hover /
+     * drag popover can show it above the value on two lines. */
     Control* const dot = new Control(
-        bridge, id, juce::String(), Control::Style::DOT, Control::Size::TINY
+        bridge, id, juce::String(title), Control::Style::DOT, Control::Size::TINY
     );
+    dot->set_value_display(Control::ValueDisplay::POPOVER);
     dot->setTooltip(tooltip);
     dots.add(dot);
     addAndMakeVisible(dot);
 
     return dot;
+}
+
+
+Control* NewGui::add_header_mix(
+        Synth::ParamId const wet, Synth::ParamId const dry, char const* const title
+) {
+    /* One rotary folding an effect's WET / DRY volumes into a single MIX (same
+     * mapping as the old in-panel MIX knob). Small header dial with a caption to
+     * the left and no on-dial value — the popover shows it on hover. */
+    ParamBridge* const bp = &bridge;
+
+    auto const read_mix = [bp, wet, dry]() -> double {
+        double const w = bp->get_ratio(wet);
+        double const d = bp->get_ratio(dry);
+        return w >= d ? juce::jlimit(0.5, 1.0, 1.0 - d * 0.5)
+                      : juce::jlimit(0.0, 0.5, w * 0.5);
+    };
+    auto const write_mix = [bp, wet, dry](double const m) {
+        bp->set_ratio(wet, juce::jmin(1.0, 2.0 * m));
+        bp->set_ratio(dry, juce::jmin(1.0, 2.0 * (1.0 - m)));
+    };
+    auto const format_mix = [](double const m) {
+        int const wet_pct = (int)std::lround(juce::jmin(1.0, 2.0 * m) * 100.0);
+        int const dry_pct = (int)std::lround(juce::jmin(1.0, 2.0 * (1.0 - m)) * 100.0);
+        return juce::String(wet_pct) + "/" + juce::String(dry_pct);
+    };
+
+    Control* const mix = new Control(
+        bridge, wet, title, Control::Style::ROTARY, Control::Size::SMALL
+    );
+    mix->set_value_hooks(read_mix, write_mix, format_mix);
+    mix->set_hook_default(0.5);
+    mix->set_label_placement(Control::LabelPos::LEFT);
+    mix->set_value_display(Control::ValueDisplay::NONE);
+    mix->set_manager(&manager);
+    mix->set_mod_caps(Modulation::CAP_MACRO);
+    mix->set_source_placeholder(true);   /* reserve / show the modulation box */
+    header_mixes.add(mix);
+    addAndMakeVisible(mix);
+
+    return mix;
 }
 
 
@@ -275,6 +328,12 @@ void NewGui::timerCallback()
         card_sig = sig;
         rebuild_cards();
         repaint(mod_bounds);
+    }
+
+    out_knob->refresh();
+
+    for (Control* const mix : header_mixes) {
+        mix->refresh();
     }
 
     for (Knob* const knob : knobs) {
@@ -463,11 +522,12 @@ void NewGui::resized()
 
     /* Global OUT knob in the header, in the gap between the tabs and the
      * editor's "Detailed view" toggle (which the plugin editor pins to the top
-     * right, ~108px wide). ~4/5 the size of a large knob's dial. Caption to the
-     * left, no value readout. */
+     * right, ~108px wide). A small effects-sized dial with its caption to the
+     * left; shifted further left so its (empty) modulation box on the right
+     * clears the Detailed-view toggle. */
     {
-        int const out_sz = 38;
-        int const reserved_right = 116;   /* clear the Detailed-view toggle */
+        int const out_sz = 34;
+        int const reserved_right = 140;   /* clear the toggle + the modulation box */
         int const kx = header_bounds.getRight() - reserved_right - out_sz;
         int const ky = header_bounds.getCentreY() - out_sz / 2;
         out_knob->setBounds(kx, ky, out_sz, out_sz);
@@ -475,14 +535,31 @@ void NewGui::resized()
             juce::Rectangle<int>(kx - 4 - 34, header_bounds.getY(), 34, header_bounds.getHeight());
     }
 
+    /* Per-effect MIX knobs, in the header gap left of the tabs. Each is a small
+     * left-captioned dial; the gap between them leaves room for the modulation
+     * box that overhangs each dial's right. */
+    {
+        int const mw = 60;
+        int const mh = 34;
+        int const gap = 20;
+        int const my = header_bounds.getCentreY() - mh / 2;
+        int mx = header_bounds.getX() + 160;
+        for (Control* const mix : header_mixes) {
+            mix->setBounds(mx, my, mw, mh);
+            mx += mw + gap;
+        }
+    }
+
     /* SYNTH / EFFECTS tabs, centred in the header row. */
     {
         int const tab_w = 92;
-        int const tab_h = 24;
         int const tab_gap = 4;
         int const total = 2 * tab_w + tab_gap;
         int const x0 = header_bounds.getCentreX() - total / 2;
-        int const ty = header_bounds.getCentreY() - tab_h / 2;
+        /* Tabs span the full header height (no vertical padding) so the active
+         * tab's edge glow is measured against the whole header. */
+        int const ty = header_bounds.getY();
+        int const tab_h = header_bounds.getHeight();
         tab_synth_bounds = juce::Rectangle<int>(x0, ty, tab_w, tab_h);
         tab_effects_bounds = juce::Rectangle<int>(x0 + tab_w + tab_gap, ty, tab_w, tab_h);
     }
@@ -674,6 +751,38 @@ void NewGui::paint_tabs(juce::Graphics& g)
     int const baseline = header_bounds.getBottom();
 
     for (auto const& tab : tabs) {
+        /* Active tab: a soft radial bloom mirrored on the bottom AND top edges,
+         * each anchored on its edge, brightest at the centre and falling off
+         * outward to transparent. Squashed hard vertically so the circular
+         * gradient reads as a thin, wide, tab-shaped bloom. Behind the label. */
+        if (tab.on) {
+            auto const rf = tab.r.toFloat();
+            float const cx = rf.getCentreX();
+
+            /* Draw one edge bloom anchored at anchor_y, filling toward fill_y
+             * (kept inside the tab so it never leaks past the edge). */
+            auto const bloom = [&](juce::Colour const color, float const radius, float const scale, float const anchor_y, float const fill_y) {
+                juce::ColourGradient grad(
+                    color, cx, anchor_y,
+                    color.withAlpha(0.0f), cx + radius, anchor_y, true);
+
+                juce::Graphics::ScopedSaveState const state(g);
+                g.addTransform(juce::AffineTransform::scale(1.0f, scale, cx, anchor_y));
+                g.setGradientFill(grad);
+                g.fillRect(juce::Rectangle<float>::leftTopRightBottom(
+                    rf.getX(), juce::jmin(anchor_y, fill_y),
+                    rf.getRight(), juce::jmax(anchor_y, fill_y)));
+            };
+
+            /* rises from the baseline */
+            bloom(Theme::ACCENT.withAlpha(0.25f), rf.getWidth() * 0.5f, 0.25f, rf.getBottom() + 2.0f, rf.getY());
+            /* off-screen and only its fading tail shows — no clipped flat edge. */
+            bloom(Theme::ACCENT.withAlpha(0.2f), rf.getWidth() * 0.55f, 0.25f, rf.getY() - 7.0f, rf.getBottom());
+            // alternate shadow style:
+            // bloom(Theme::SHADOW.withAlpha(0.55f), rf.getWidth() * 0.5f, 0.25f, rf.getBottom() - 2.0f, rf.getY());
+            // bloom(Theme::SHADOW.withAlpha(0.55f), rf.getWidth() * 0.5f, 0.25f, rf.getY() - 2.0f, rf.getBottom());
+        }
+
         g.setColour(tab.on ? Theme::TEXT : Theme::TEXT_DIM);
         g.drawText(tab.label, tab.r, juce::Justification::centred, false);
 

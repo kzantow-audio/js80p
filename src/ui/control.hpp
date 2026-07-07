@@ -37,6 +37,7 @@ namespace JS80P
 {
 
 class ModBadge;
+class ValuePopover;
 
 /**
  * \brief A resolution-independent value control bound to one Synth parameter,
@@ -157,6 +158,9 @@ class Control : public juce::Component, public juce::SettableTooltipClient
 
         void refresh();
 
+        /** True once a modulator is assigned to this control's parameter. */
+        bool is_assigned() const { return assigned; }
+
         /** Vertical drag distance (px) that spans the full 0..1 range; shared
          *  with the other value controls so they all feel the same. */
         static constexpr double DRAG_PIXELS_FULL_RANGE = 220.0;
@@ -177,6 +181,7 @@ class Control : public juce::Component, public juce::SettableTooltipClient
 
     private:
         friend class ModBadge;
+        friend class ValuePopover;
 
         static constexpr double WHEEL_STEP = 0.04;
         static constexpr float RING_BAND = 10.0f;   /* clickable band outside the circle */
@@ -200,6 +205,13 @@ class Control : public juce::Component, public juce::SettableTooltipClient
          */
         void update_badge();
         bool badge_shown() const;
+
+        /** Position the free-floating value popover (a sibling brought to front)
+         *  above the control's title / dial / badge, or hide it. */
+        void update_popover();
+        bool popover_shown() const;
+        bool title_on_knob() const;   /* caption rendered on the control itself */
+        bool value_on_knob() const;   /* value permanently rendered on the control */
 
         juce::String format_value() const;
         juce::String format_ratio(double const r) const;
@@ -236,11 +248,10 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         void paint_rotary(juce::Graphics& g, juce::Rectangle<int> const& value_area);
         void paint_dot(juce::Graphics& g);
         void paint_slider(juce::Graphics& g);
-        void paint_value_popover(juce::Graphics& g);
 
         /* Typed value entry (Alt-click). */
         void open_value_editor();
-        void commit_editor();
+        void close_editor(bool const apply);
 
         ParamBridge& bridge;
         Synth::ParamId const param_id;
@@ -294,6 +305,7 @@ class Control : public juce::Component, public juce::SettableTooltipClient
         double depth;   /* signed: target = clamp(base + depth) */
 
         std::unique_ptr<ModBadge> badge;
+        std::unique_ptr<ValuePopover> popover;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Control)
 };

@@ -42,7 +42,7 @@ MacroStrip::MacroStrip(ParamBridge& bridge)
             Control::Style::ROTARY, Control::Size::SMALL
         );
         cell->set_macro(m);
-        cell->set_label_placement(Control::LabelPos::LEFT);
+        cell->set_label_placement(Control::LabelPos::TOP);
         cell->set_value_display(Control::ValueDisplay::POPOVER);
         auto curve = std::make_unique<CurveSelector>(
             bridge, std::vector<Synth::ParamId>{ Modulation::macro_dcv(m) }, false, true
@@ -65,10 +65,22 @@ void MacroStrip::refresh()
 
 void MacroStrip::resized()
 {
-    int const cell = getWidth() / COUNT;
+    /* Fixed-width cells (dial + badge/curve room) packed with a small gap — about
+     * half the whitespace of the old full-width division — and the whole group
+     * centred horizontally on the strip. */
+    int const n = cells.size();
+    if (n == 0) {
+        return;
+    }
 
-    for (int i = 0; i != cells.size(); ++i) {
-        cells[i]->setBounds(i * cell, 2, cell, getHeight() - 4);
+    int const cell_w = 84;
+    int const gap = 22;
+    int const total = n * cell_w + (n - 1) * gap;
+    int x = (getWidth() - total) / 2;
+
+    for (int i = 0; i != n; ++i) {
+        cells[i]->setBounds(x, 2, cell_w, getHeight() - 4);
+        x += cell_w + gap;
     }
 }
 
@@ -77,7 +89,9 @@ void MacroStrip::paint(juce::Graphics& g)
 {
     g.setColour(Theme::PANEL);
     g.fillRect(getLocalBounds());
-    g.setColour(Theme::EDGE_SOFT);
+    /* Top and bottom borders matching the oscillator panels' edge. */
+    g.setColour(Theme::EDGE);
+    g.fillRect(0, 0, getWidth(), 1);
     g.fillRect(0, getHeight() - 1, getWidth(), 1);
 }
 

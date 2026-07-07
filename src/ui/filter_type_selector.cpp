@@ -30,7 +30,9 @@ static float const* filter_glyph_points(int const type, int& point_count)
 {
     static float const LP[]    = {0.0f,0.8f,  0.45f,0.78f, 0.7f,0.55f, 1.0f,0.12f};
     static float const HP[]    = {0.0f,0.12f, 0.3f,0.55f,  0.55f,0.78f,1.0f,0.8f};
-    static float const BP[]    = {0.0f,0.18f, 0.35f,0.28f, 0.5f,0.85f, 0.65f,0.28f, 1.0f,0.18f};
+    /* A downward-opening parabola (rounded arch), sampled y = 0.8 - 2.6 (x-0.5)^2. */
+    static float const BP[]    = {0.0f,0.15f, 0.125f,0.43f, 0.25f,0.64f, 0.375f,0.76f,
+                                  0.5f,0.8f, 0.625f,0.76f, 0.75f,0.64f, 0.875f,0.43f, 1.0f,0.15f};
     static float const NOTCH[] = {0.0f,0.75f, 0.4f,0.68f,  0.5f,0.15f, 0.6f,0.68f,  1.0f,0.75f};
     static float const BELL[]  = {0.0f,0.45f, 0.35f,0.5f,  0.5f,0.85f, 0.65f,0.5f,  1.0f,0.45f};
     static float const LS[]    = {0.0f,0.82f, 0.4f,0.8f,   0.58f,0.42f,1.0f,0.38f};
@@ -39,7 +41,7 @@ static float const* filter_glyph_points(int const type, int& point_count)
     switch (type) {
         case 0:  point_count = 4; return LP;
         case 1:  point_count = 4; return HP;
-        case 2:  point_count = 5; return BP;
+        case 2:  point_count = 9; return BP;
         case 3:  point_count = 5; return NOTCH;
         case 4:  point_count = 5; return BELL;
         case 5:  point_count = 4; return LS;
@@ -55,6 +57,11 @@ static constexpr int GRID_COLS = 3;
 static constexpr int GRID_ROWS = 3;
 static constexpr int CELL_COL[FilterTypeSelector::COUNT] = { 0, 0, 0, 1, 1, 2, 2 };
 static constexpr int CELL_ROW[FilterTypeSelector::COUNT] = { 0, 1, 2, 0, 1, 0, 1 };
+
+/* Full names for the hover popover (order: LP HP BP Notch Bell LS HS). */
+static char const* const FILTER_NAMES[FilterTypeSelector::COUNT] = {
+    "Low-pass", "High-pass", "Band-pass", "Notch", "Bell", "Low shelf", "High shelf"
+};
 
 
 FilterTypeSelector::FilterTypeSelector(
@@ -129,17 +136,72 @@ void FilterTypeSelector::paint(juce::Graphics& g)
 
 void FilterTypeSelector::mouseDown(juce::MouseEvent const& event)
 {
-    int const col = event.x / juce::jmax(1, getWidth() / GRID_COLS);
-    int const row = event.y / juce::jmax(1, getHeight() / GRID_ROWS);
+    int const index = index_at(event.getPosition());
+
+    if (index >= 0) {
+        selected = index;
+        bridge.set_discrete(param_id, index);
+        repaint();
+    }
+}
+
+
+int FilterTypeSelector::index_at(juce::Point<int> const p) const
+{
+    int const col = p.x / juce::jmax(1, getWidth() / GRID_COLS);
+    int const row = p.y / juce::jmax(1, getHeight() / GRID_ROWS);
 
     for (int i = 0; i != COUNT; ++i) {
         if (CELL_COL[i] == col && CELL_ROW[i] == row) {
-            selected = i;
-            bridge.set_discrete(param_id, i);
-            repaint();
-            return;
+            return i;
         }
     }
+    return -1;
+}
+
+
+juce::Rectangle<int> FilterTypeSelector::cell_bounds(int const type) const
+{
+    int const w = getWidth() / GRID_COLS;
+    int const h = getHeight() / GRID_ROWS;
+    return juce::Rectangle<int>(CELL_COL[type] * w, CELL_ROW[type] * h, w, h);
+}
+
+
+void FilterTypeSelector::update_name_popover()
+{
+    if (hovered < 0 || hovered >= COUNT) {
+        ValuePopover::hide(name_popover);
+        return;
+    }
+
+    ValuePopover::show(
+        name_popover, *this, cell_bounds(hovered), {}, FILTER_NAMES[hovered], Theme::ACCENT
+    );
+}
+
+
+void FilterTypeSelector::mouseMove(juce::MouseEvent const& event)
+{
+    int const index = index_at(event.getPosition());
+    if (index != hovered) {
+        hovered = index;
+        update_name_popover();
+    }
+}
+
+
+void FilterTypeSelector::mouseEnter(juce::MouseEvent const& event)
+{
+    hovered = index_at(event.getPosition());
+    update_name_popover();
+}
+
+
+void FilterTypeSelector::mouseExit(juce::MouseEvent const& /* event */)
+{
+    hovered = -1;
+    ValuePopover::hide(name_popover);
 }
 
 }

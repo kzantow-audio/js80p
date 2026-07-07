@@ -19,12 +19,15 @@
 #ifndef JS80P__UI__FILTER_TYPE_SELECTOR_HPP
 #define JS80P__UI__FILTER_TYPE_SELECTOR_HPP
 
+#include <memory>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "js80p.hpp"
 #include "synth.hpp"
 
 #include "ui/param_bridge.hpp"
+#include "ui/value_popover.hpp"
 
 
 namespace JS80P
@@ -51,8 +54,14 @@ class FilterTypeSelector : public juce::Component
 
         void paint(juce::Graphics& g) override;
         void mouseDown(juce::MouseEvent const& event) override;
+        void mouseMove(juce::MouseEvent const& event) override;
+        void mouseEnter(juce::MouseEvent const& event) override;
+        void mouseExit(juce::MouseEvent const& event) override;
 
     private:
+        int index_at(juce::Point<int> const p) const;
+        juce::Rectangle<int> cell_bounds(int const type) const;
+        void update_name_popover();
         void draw_glyph(
             juce::Graphics& g, juce::Rectangle<float> area, int const type
         ) const;
@@ -60,6 +69,8 @@ class FilterTypeSelector : public juce::Component
         ParamBridge& bridge;
         Synth::ParamId const param_id;
         int selected;
+        int hovered { -1 };
+        std::unique_ptr<ValuePopover> name_popover;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterTypeSelector)
 };
