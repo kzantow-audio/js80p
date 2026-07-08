@@ -140,6 +140,7 @@ class ModulationManager
         std::string shape_key(Modulation::Type const type, int const index) const;
         int allocate(Modulation::Type const type, bool const need_pw);
         void copy_shape(Modulation::Type const type, int const from, int const to);
+        void reset_new_envelope(int const slot);
         void set_base(Modulation::Type const type, int const slot, double const base_ratio);
 
         bool is_used(Modulation::Type const type, int const index) const;

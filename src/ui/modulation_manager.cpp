@@ -327,6 +327,34 @@ void ModulationManager::copy_shape(
 }
 
 
+void ModulationManager::reset_new_envelope(int const slot)
+{
+    /* A freshly-allocated envelope pool slot can carry stale values from a
+     * previously-freed assignment, so a brand-new (non-cloned) envelope would
+     * otherwise inherit whatever delay / times / curves the slot last held.
+     * Reset the shared shape params to their engine defaults, then apply the
+     * standard new-envelope times (matching INIT's setup_env): 0.001 s attack,
+     * 0 hold, 1 s decay, 0.1 s release. The per-destination levels
+     * (INI / PK / SUS / FIN) are set separately by set_base + the depth write. */
+    Synth::ParamId const shape[] = {
+        Modulation::env_scl(slot), Modulation::env_del(slot), Modulation::env_atk(slot),
+        Modulation::env_hld(slot), Modulation::env_dec(slot), Modulation::env_rel(slot),
+        Modulation::env_tin(slot), Modulation::env_vin(slot), Modulation::env_ash(slot),
+        Modulation::env_dsh(slot), Modulation::env_rsh(slot), Modulation::env_upd(slot),
+        Modulation::env_syn(slot),
+    };
+
+    for (Synth::ParamId const p : shape) {
+        bridge.set_ratio(p, bridge.get_default_ratio(p));
+    }
+
+    bridge.set_ratio(Modulation::env_atk(slot), bridge.ratio_for_display(Modulation::env_atk(slot), 0.001));
+    bridge.set_ratio(Modulation::env_hld(slot), 0.0);
+    bridge.set_ratio(Modulation::env_dec(slot), bridge.ratio_for_display(Modulation::env_dec(slot), 1.0));
+    bridge.set_ratio(Modulation::env_rel(slot), bridge.ratio_for_display(Modulation::env_rel(slot), 0.1));
+}
+
+
 void ModulationManager::set_base(
         Modulation::Type const type, int const slot, double const base_ratio
 ) {
@@ -359,6 +387,8 @@ int ModulationManager::assign(
 
     if (clone_from > 0) {
         copy_shape(type, clone_from, slot);
+    } else if (type == Modulation::ENVELOPE) {
+        reset_new_envelope(slot);
     }
 
     set_base(type, slot, base_ratio);
