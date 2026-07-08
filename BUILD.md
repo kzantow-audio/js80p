@@ -148,6 +148,29 @@ Or configure with `-DCOPY_PLUGIN_AFTER_BUILD=TRUE` to install on build.
 
 ---
 
+## Drop-in replacement for the original JS80P
+
+The JUCE VST3 is built to load transparently into DAW projects that used the
+original (hand-rolled) JS80P VST3:
+
+- **Component class ID matches.** A host identifies a saved plugin by its VST3
+  *component* (audio-module) class ID. `CMakeLists.txt` forces JUCE to expose the
+  original's ID via `JUCE_VST3_COMPONENT_CLASS` (legacy `FUID(0x565354, 0x414d4a38,
+  0x6a733830, 0x70000000)` — bytes `\0VST AMJ8 js80 p`) instead of the ID JUCE
+  would hash from the manufacturer/plugin codes. The value is set per platform
+  because the Steinberg `INLINE_UID` byte order depends on `COM_COMPATIBLE`
+  (Windows vs macOS/Linux). Verify after a build:
+  ```bash
+  grep -A1 '"Audio Module Class"' \
+    build/JS80P_artefacts/Release/VST3/JS80P.vst3/Contents/Resources/moduleinfo.json
+  # CID must be 00565354414D4A386A73383070000000 (macOS/Linux)
+  #          or 545356004D41384A6A73383070000000 (Windows)
+  ```
+- **Patch/state is compatible both ways.** Both builds store the raw `Serializer`
+  patch as the plugin state; JUCE appends its private block behind a leading
+  `int64(0)`, which the legacy reader stops at, so old projects restore their patch
+  unchanged and vice-versa.
+
 ## Verifying
 
 Run [pluginval](https://github.com/Tracktion/pluginval) against the built VST3:

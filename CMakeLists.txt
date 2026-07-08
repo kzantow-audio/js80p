@@ -141,6 +141,33 @@ juce_add_binary_data(JS80PAssets
 # module, so the object code must be relocatable.
 set_target_properties(JS80PAssets PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
+# ── Drop-in-replacement identity: force the legacy VST3 class ID ──
+# A host keys a plugin instance in a saved project off the VST3 *component*
+# (audio-module / kVstAudioEffectClass) class ID. To load transparently into
+# projects that used the original hand-rolled JS80P VST3, the JUCE port must
+# expose the SAME component class ID instead of the ID JUCE would otherwise
+# derive by hashing PLUGIN_MANUFACTURER_CODE + PLUGIN_CODE.
+#
+# The legacy ID is the Steinberg FUID(0x565354, 0x414d4a38, 0x6a733830,
+# 0x70000000) — bytes "\0VST" "AMJ8" "js80" "p" — registered via the SDK's
+# INLINE_UID macro. That macro lays the 16 bytes out DIFFERENTLY depending on
+# COM_COMPATIBLE (1 on Windows, 0 on macOS/Linux), so the raw class ID a host
+# stores is platform-specific. JUCE's JUCE_VST3_COMPONENT_CLASS override feeds
+# the hex straight through (juce::VST3Interface::hexStringToId, no swap) and the
+# factory reports those bytes verbatim, so we must supply the matching layout
+# per platform. Values below were verified against the actual SDK macro.
+#   * macOS/Linux (COM_COMPATIBLE=0): 00 56 53 54 41 4D 4A 38 6A 73 38 30 70 …
+#   * Windows     (COM_COMPATIBLE=1): 54 53 56 00 4D 41 38 4A 6A 73 38 30 70 …
+# Only the component class is overridable (and only it matters for identity);
+# the controller class ID is not persisted by hosts, so JUCE's own is fine.
+# The saved-state chunk is already the raw Serializer patch on both sides, so
+# old projects restore their patch unchanged once the class ID matches.
+if(WIN32)
+  set(JS80P_VST3_COMPONENT_CLASS "545356004D41384A6A73383070000000")
+else()
+  set(JS80P_VST3_COMPONENT_CLASS "00565354414D4A386A73383070000000")
+endif()
+
 # JS80P_* are consumed only by the "About" screen (version/platform strings);
 # the DSP does no compile-time ISA dispatch, so these are display-only tokens.
 target_compile_definitions(JS80P PRIVATE
@@ -151,6 +178,13 @@ target_compile_definitions(JS80P PRIVATE
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
   JUCE_VST3_CAN_REPLACE_VST2=0
+  JUCE_VST3_COMPONENT_CLASS="${JS80P_VST3_COMPONENT_CLASS}"
+  # JS80P exposes its own MIDI-controller parameter matrix with the exact legacy
+  # VST3 ParamIDs ((channel<<8)|controller) so old automation reconnects (see
+  # src/plugin/juce/midi_ctl_parameter.hpp). Disable JUCE's built-in MIDI-CC
+  # emulation, which would otherwise add a second, differently-numbered CC
+  # parameter grid (offset + channel*130 + controller) and its own IMidiMapping.
+  JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=0
   JUCE_DISPLAY_SPLASH_SCREEN=0
   JUCE_STRICT_REFCOUNTEDPOINTER=1)
 
