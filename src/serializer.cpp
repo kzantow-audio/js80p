@@ -22,8 +22,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
-#include <cstdio>
 #include <cstring>
+#include <ios>
+#include <locale>
 #include <sstream>
 
 #include "serializer.hpp"
@@ -39,9 +40,11 @@ std::string const Serializer::LINE_END = "\r\n";
 
 std::string Serializer::serialize(Synth const& synth) noexcept
 {
-    constexpr size_t line_size = 128;
-    char line[line_size];
+    constexpr size_t line_size = 127;
+    char line[line_size + 1];
     std::string serialized("");
+    std::ostringstream oss;
+    int length;
 
     serialized.reserve(MAX_SIZE);
     serialized += "[";
@@ -49,58 +52,66 @@ std::string Serializer::serialize(Synth const& synth) noexcept
     serialized += "]";
     serialized += LINE_END;
 
+    oss.imbue(std::locale::classic());
+    oss.setf(std::ios_base::fixed, std::ios_base::floatfield);
+    oss.precision(15);
+
     for (int i = 0; i != Synth::ParamId::PARAM_ID_COUNT; ++i) {
         Synth::ParamId const param_id = (Synth::ParamId)i;
         std::string const param_name = synth.get_param_name(param_id);
 
-        if (param_name.length() > 0) {
-            Synth::ControllerId const controller_id = (
-                synth.get_param_controller_id_atomic(param_id)
+        if (param_name.length() < 1) {
+            continue;
+        }
+
+        Synth::ControllerId const controller_id = (
+            synth.get_param_controller_id_atomic(param_id)
+        );
+
+        if (controller_id == Synth::ControllerId::NONE) {
+            Number const set_ratio = synth.get_param_ratio_atomic(param_id);
+            Number const default_ratio = (
+                synth.get_param_default_ratio(param_id)
             );
 
-            if (controller_id == Synth::ControllerId::NONE) {
-                Number const set_ratio = synth.get_param_ratio_atomic(param_id);
-                Number const default_ratio = (
-                    synth.get_param_default_ratio(param_id)
-                );
-
-                if (std::fabs(default_ratio - set_ratio) > 0.000001) {
-                    int const length = snprintf(
-                        line,
-                        line_size,
-                        "%s = %.15f",
-                        param_name.c_str(),
-                        set_ratio
-                    );
-                    trim_excess_zeros_from_end_after_snprintf(
-                        line, length, line_size
-                    );
-                    serialized += line;
-                    serialized += LINE_END;
-                }
-            } else {
-                int const length = snprintf(
-                    line,
-                    line_size,
-                    "%s%s = %.15f",
-                    param_name.c_str(),
-                    CONTROLLER_SUFFIX.c_str(),
-                    controller_id_to_float(controller_id)
-                );
-                trim_excess_zeros_from_end_after_snprintf(
-                    line, length, line_size
-                );
-                serialized += line;
-                serialized += LINE_END;
+            if (std::fabs(default_ratio - set_ratio) <= 0.000001) {
+                continue;
             }
+
+            oss << set_ratio;
+            length = snprintf(
+                line,
+                line_size,
+                "%s = %s",
+                param_name.c_str(),
+                oss.str().c_str()
+            );
+        } else {
+            oss << controller_id_to_float(controller_id);
+            length = snprintf(
+                line,
+                line_size,
+                "%s%s = %s",
+                param_name.c_str(),
+                CONTROLLER_SUFFIX.c_str(),
+                oss.str().c_str()
+            );
         }
+
+        trim_excess_zeros_from_end(line, length, line_size);
+        line[line_size] = '\x00';
+        serialized += line;
+        serialized += LINE_END;
+
+        oss.str("");
+        oss.clear();
     }
 
     return serialized;
 }
 
 
-void Serializer::trim_excess_zeros_from_end_after_snprintf(
+void Serializer::trim_excess_zeros_from_end(
         char* const number,
         int const length,
         size_t const max_length
@@ -740,9 +751,7 @@ bool Serializer::skipping_whitespace_or_comment_reaches_the_end(
     }
 
     if (is_comment_leader(*it)) {
-        while (it != end) {
-            ++it;
-        }
+        it = end;
 
         return true;
     }
@@ -829,11 +838,17 @@ bool Serializer::parse_number(
         std::string::const_iterator const& end,
         Number& number
 ) noexcept {
-    std::string number_text;
+    std::string number_text("");
     bool has_dot = false;
 
     while (it != end) {
-        if (*it == '.') {
+        /*
+        Decimal separator was locale-dependent before v4.1.1 - let's try loading
+        those broken serializations as well.
+        */
+        bool const is_comma = *it == ',';
+
+        if (is_comma || *it == '.') {
             if (has_dot) {
                 return false;
             }
@@ -843,7 +858,8 @@ bool Serializer::parse_number(
             break;
         }
 
-        number_text += *(it++);
+        number_text += is_comma ? '.' : *it;
+        ++it;
     }
 
     if (number_text.length() == 0) {
@@ -861,6 +877,7 @@ Number Serializer::to_number(std::string const& text) noexcept
     std::istringstream s(text);
     Number n;
 
+    s.imbue(std::locale::classic());
     s >> n;
 
     return n;
