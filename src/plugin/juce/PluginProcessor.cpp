@@ -17,6 +17,7 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "plugin/juce/PluginProcessor.hpp"
@@ -41,6 +42,10 @@ JS80PProcessor::JS80PProcessor()
     current_program(0)
 {
     Serializer::import_patch_in_gui_thread(synth, bank[current_program].serialize());
+    build_midi_ctl_params();
+    vst3_extensions = create_vst3_midi_mapping_extensions(
+        collect_supported_midi_controllers()
+    );
 }
 
 
@@ -153,6 +158,137 @@ void JS80PProcessor::dispatch_midi(juce::MidiBuffer& midi)
 }
 
 
+void JS80PProcessor::build_midi_ctl_params()
+{
+    /*
+     * Mirror JS80P's original VST3 controller layout: for every MIDI channel,
+     * a pitch-bend and a channel-pressure parameter, plus one parameter for
+     * each supported MIDI CC. The ParamID ((channel<<8)|controller) and the
+     * default values match the legacy plugin so that projects automating the
+     * original JS80P reconnect (see MidiCtlParameter and BUILD.md).
+     */
+    for (Midi::Channel channel = 0; channel != Midi::CHANNELS; ++channel) {
+        add_midi_ctl_param(
+            channel,
+            MidiCtlParameter::CTL_PITCH_BEND,
+            Synth::ControllerId::PITCH_WHEEL,
+            0.5
+        );
+        add_midi_ctl_param(
+            channel,
+            MidiCtlParameter::CTL_CHANNEL_PRESSURE,
+            Synth::ControllerId::CHANNEL_PRESSURE,
+            0.0
+        );
+
+        for (int cc = 0; cc != Synth::MIDI_CONTROLLERS; ++cc) {
+            if (!Synth::is_supported_midi_controller((Midi::Controller)cc)) {
+                continue;
+            }
+
+            double const default_normalized = (
+                cc == (int)Synth::ControllerId::SUSTAIN_PEDAL ? 0.0 : 0.5
+            );
+
+            add_midi_ctl_param(
+                channel, cc, (Synth::ControllerId)cc, default_normalized
+            );
+        }
+    }
+}
+
+
+std::array<bool, MIDI_CTL_COUNT>
+JS80PProcessor::collect_supported_midi_controllers()
+{
+    /*
+     * The controller numbers that have a corresponding automatable parameter,
+     * for the VST3 IMidiMapping to advertise (see create_vst3_midi_mapping_
+     * extensions). Must stay in step with build_midi_ctl_params(): every
+     * supported CC, plus pitch bend and channel pressure.
+     */
+    std::array<bool, MIDI_CTL_COUNT> supported{};
+
+    supported[MidiCtlParameter::CTL_PITCH_BEND] = true;
+    supported[MidiCtlParameter::CTL_CHANNEL_PRESSURE] = true;
+
+    for (int cc = 0; cc != Synth::MIDI_CONTROLLERS; ++cc) {
+        if (Synth::is_supported_midi_controller((Midi::Controller)cc)) {
+            supported[(size_t)cc] = true;
+        }
+    }
+
+    return supported;
+}
+
+
+void JS80PProcessor::add_midi_ctl_param(
+        Midi::Channel const channel,
+        int const controller_number,
+        Synth::ControllerId const name_source,
+        double const default_normalized
+) {
+    MidiCtlParameter* const param = new MidiCtlParameter(
+        channel, controller_number, name_source, default_normalized
+    );
+
+    addParameter(param);
+    midi_ctl_params.push_back(param);
+}
+
+
+void JS80PProcessor::dispatch_parameter_automation() noexcept
+{
+    Seconds const time_offset = synth.sample_count_to_time_offset(0);
+
+    for (MidiCtlParameter* const param : midi_ctl_params) {
+        float const normalized = param->get_normalized();
+
+        if (normalized == param->last_normalized) {
+            continue;
+        }
+
+        param->last_normalized = normalized;
+
+        switch (param->controller_number) {
+            case MidiCtlParameter::CTL_PITCH_BEND:
+                synth.pitch_wheel_change(
+                    time_offset, param->channel, float_to_midi_word(normalized)
+                );
+                break;
+
+            case MidiCtlParameter::CTL_CHANNEL_PRESSURE:
+                synth.channel_pressure(
+                    time_offset, param->channel, float_to_midi_byte(normalized)
+                );
+                break;
+
+            default:
+                synth.control_change(
+                    time_offset,
+                    param->channel,
+                    (Midi::Controller)param->controller_number,
+                    float_to_midi_byte(normalized)
+                );
+                break;
+        }
+    }
+}
+
+
+Midi::Byte JS80PProcessor::float_to_midi_byte(float const value) noexcept
+{
+    return (Midi::Byte)juce::jlimit(0, 127, (int)std::round(value * 127.0f));
+}
+
+
+Midi::Word JS80PProcessor::float_to_midi_word(float const value) noexcept
+{
+    /* Outside the 14-bit range, but more accurate; matches the legacy plugin. */
+    return (Midi::Word)juce::jlimit(0, 16384, (int)std::round(value * 16384.0f));
+}
+
+
 template<typename FloatType>
 void JS80PProcessor::render(
         juce::AudioBuffer<FloatType>& buffer,
@@ -161,6 +297,7 @@ void JS80PProcessor::render(
     juce::ScopedNoDenormals const no_denormals;
 
     update_bpm();
+    dispatch_parameter_automation();
     dispatch_midi(midi);
 
     int const sample_count = buffer.getNumSamples();
@@ -219,6 +356,12 @@ juce::AudioProcessorEditor* JS80PProcessor::createEditor()
 bool JS80PProcessor::hasEditor() const
 {
     return true;
+}
+
+
+juce::VST3ClientExtensions* JS80PProcessor::getVST3ClientExtensions()
+{
+    return vst3_extensions.get();
 }
 
 

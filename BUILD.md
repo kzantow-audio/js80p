@@ -171,6 +171,89 @@ original (hand-rolled) JS80P VST3:
   `int64(0)`, which the legacy reader stops at, so old projects restore their patch
   unchanged and vice-versa.
 
+- **MIDI-CC automation reconnects in every host.** The port re-exposes the legacy
+  MIDI-controller parameter matrix — a pitch-bend, a channel-pressure, and one
+  parameter per supported MIDI CC on each of the 16 channels (1152 params) — with
+  the *exact* legacy VST3 ParamIDs `(channel<<8)|controller`. Because JUCE derives a
+  VST3 ParamID by hashing the parameter's string id
+  (`String::hashCode()&0x7fffffff`), each parameter's id is a single Unicode code
+  point equal to the wanted ParamID, so JUCE hands the host that exact number — no
+  host-side remapping needed (see `src/plugin/juce/midi_ctl_parameter.hpp`). On
+  automation the value is translated into the same `Synth::control_change` /
+  `pitch_wheel_change` / `channel_pressure` call the legacy processor made. Verify
+  with the param dumper approach, or trust pluginval `--strictness-level 10` (its
+  parameter/automation/fuzz tests exercise the whole matrix).
+
+- **`IMidiMapping` matches the legacy plugin — with JUCE's emulation as the
+  early-query fallback.** The port hands the VST3 host its own `IMidiMapping` (via
+  `AudioProcessor::getVST3ClientExtensions()` → `queryIEditController`, see
+  `src/plugin/juce/vst3_midi_mapping.{hpp,cpp}`) whose `getMidiControllerAssignment`
+  returns the same `(channel<<8)|controller` ParamIDs as the parameter matrix — a
+  line-for-line port of the legacy controller. This does two things the legacy plugin
+  also did: (1) hosts recognise the 1152 params as MIDI-CC destinations and keep them
+  out of the ordinary automation list instead of showing the whole grid; (2) live
+  MIDI CC / pitch-bend / **channel pressure** arrive as parameter changes on those
+  IDs and are forwarded to the synth by `dispatch_parameter_automation()` — the same
+  single sink used for host automation, mirroring the legacy `process()`. VST3
+  delivers CC / pitch-bend / channel-pressure *only* through `IMidiMapping` (they are
+  not note-style events), so a host must get a working mapping or those messages are
+  dropped. `dispatch_midi()` still handles raw MIDI as a harmless fallback for hosts
+  that send it (REAPER sends legacy CC events).
+
+  **Reach caveat (the Bitwig lesson):** JUCE's wrapper can only hand out the
+  extension's `IMidiMapping` once the host has *connected* the component and the
+  controller — the controller reaches `getVST3ClientExtensions()` through the
+  `AudioProcessor` pointer it learns in that connection handshake. The wrapper's
+  controller object also implements `IMidiMapping` itself, and a host that queries
+  the interface *before* connecting caches that controller implementation forever
+  (COM interfaces are queried once) — verified with a minimal probing host
+  (`scripts/vst3_midi_mapping_probe.cpp`, build/run instructions in its header): a
+  pre-connect `queryInterface` returns the wrapper's own mapping and keeps answering
+  through it even after the handshake completes, while a post-connect query returns
+  ours. REAPER queries late → gets the legacy mapping; **Bitwig queries early → gets
+  the wrapper's own mapping**. That is why
+  `JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS` must stay **enabled** (`=1`, the JUCE
+  default): with it, the wrapper's always-available mapping routes every
+  (channel, controller) — including pitch bend (129) and channel pressure /
+  aftertouch (128) — to a hidden non-automatable "MIDI CC" parameter and converts
+  host parameter changes back into MIDI events that land in `processBlock()`'s
+  `MidiBuffer` → `dispatch_midi()`, the standard stock-JUCE-synth path that Bitwig
+  is known to work with. With it *disabled* (as this port briefly did), the wrapper
+  mapping is a dead `kResultFalse` stub, and early-querying hosts get **no CC /
+  pitch-bend / aftertouch at all** and list the whole 1152-param grid as ordinary
+  automation targets. Net per host: late-querying hosts behave exactly like the
+  legacy plugin (mapped params hidden, CC moves the legacy params); early-querying
+  hosts get MIDI through JUCE's emulation and additionally list the legacy params as
+  automatable — a cosmetic deviation from the original, which showed none in Bitwig.
+
+  This is **VST3-only code**: `vst3_midi_mapping.cpp` pulls in the Steinberg VST3 SDK,
+  whose interface-IID symbols (`FUnknown::iid`, `IMidiMapping::iid`) are provided by
+  JUCE's VST3 wrapper *in the same link* — in a non-VST3 link they end up undefined
+  (MSVC/lld-link). So the file is compiled into **every plugin-format target**
+  (never the shared-code target, which is compiled once with
+  `JucePlugin_Build_<FORMAT>=1` for *all* enabled formats) and switches on JUCE's
+  per-format `JucePlugin_Build_VST3` define — the same idiom JUCE's own
+  plugin-client wrapper TUs use: the VST3 target compiles the real mapping, every
+  other format compiles a `nullptr` fallback, and the two can't drift apart because
+  they share one translation unit and one declaration. To keep the SDK out of the
+  shared code, the implementation depends only on JUCE + the SDK: the shared
+  `PluginProcessor` computes which controllers have a parameter
+  (`collect_supported_midi_controllers()`) and passes that set into
+  `create_vst3_midi_mapping_extensions()`.
+
+Known gaps (not identity, but not yet at parity with the legacy VST3):
+
+- **No VST2.** The legacy also shipped a VST2 (`uniqueID 'amj8'`); JUCE cannot build
+  VST2, so VST2-based projects are not covered. Keep the legacy `Makefile` VST2 for
+  those.
+- **Program-change & patch-changed params.** The legacy exposed a program-change
+  (id 130) and a read-only "Patch Changed" (id 255) parameter. Programs work through
+  JUCE's own program mechanism, so these remain cosmetic/host-convenience gaps rather
+  than automation-reconnection gaps. (`IMidiMapping` itself is now implemented — see
+  above.)
+
+---
+
 ## Verifying
 
 Run [pluginval](https://github.com/Tracktion/pluginval) against the built VST3:

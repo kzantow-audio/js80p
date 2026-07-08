@@ -70,6 +70,32 @@ target_sources(JS80P PRIVATE
 
 target_include_directories(JS80P PRIVATE src lib)
 
+# The VST3 IMidiMapping is VST3-only code: it pulls in the Steinberg VST3 SDK,
+# whose interface-IID symbols (FUnknown::iid, IMidiMapping::iid) are supplied by
+# JUCE's VST3 wrapper in the SAME link. Compiling it into the shared code would
+# leak those ODR-uses into non-VST3 targets (undefined in the Standalone link on
+# MSVC/lld-link). So vst3_midi_mapping.cpp is compiled into EVERY plugin-format
+# target (juce_add_plugin names them JS80P_<FORMAT> and defines
+# JucePlugin_Build_<FORMAT> 1/0 on each): under JucePlugin_Build_VST3 it is the
+# real mapping, in every other format it compiles to a nullptr fallback. The
+# shared PluginProcessor calls create_vst3_midi_mapping_extensions() and the
+# per-format object resolves it. The real branch depends only on JUCE + the SDK
+# (the supported-controller set is passed in), so only the SDK include path is
+# added, and only for VST3. The SDK path is JUCE-internal, hence pinned
+# alongside the JUCE GIT_TAG above.
+foreach(_js80p_fmt VST3 Standalone AU AUv3 VST LV2 AAX Unity)
+  if(TARGET JS80P_${_js80p_fmt})
+    target_sources(JS80P_${_js80p_fmt}
+      PRIVATE src/plugin/juce/vst3_midi_mapping.cpp)
+    target_include_directories(JS80P_${_js80p_fmt} PRIVATE src)
+  endif()
+endforeach()
+
+if(TARGET JS80P_VST3)
+  target_include_directories(JS80P_VST3 PRIVATE
+    "${juce_SOURCE_DIR}/modules/juce_audio_processors_headless/format_types/VST3_SDK")
+endif()
+
 # Windows toolchain squeeze — the one compiler that works is clang-cl:
 #   * JUCE hard-errors on MinGW/GCC (juce_TargetPlatform.h: "MinGW is not
 #     supported"), so a GNU-front-end compiler on Windows is out.
@@ -179,12 +205,22 @@ target_compile_definitions(JS80P PRIVATE
   JUCE_USE_CURL=0
   JUCE_VST3_CAN_REPLACE_VST2=0
   JUCE_VST3_COMPONENT_CLASS="${JS80P_VST3_COMPONENT_CLASS}"
-  # JS80P exposes its own MIDI-controller parameter matrix with the exact legacy
-  # VST3 ParamIDs ((channel<<8)|controller) so old automation reconnects (see
-  # src/plugin/juce/midi_ctl_parameter.hpp). Disable JUCE's built-in MIDI-CC
-  # emulation, which would otherwise add a second, differently-numbered CC
-  # parameter grid (offset + channel*130 + controller) and its own IMidiMapping.
-  JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=0
+  # Keep JUCE's built-in MIDI-CC emulation ENABLED (=1 is the JUCE default; kept
+  # explicit because it is load-bearing). The VST3 controller object itself
+  # implements IMidiMapping, and hosts that query that interface BEFORE
+  # connecting the component and controller (Bitwig) cache the controller's
+  # stub and never see the legacy IMidiMapping we expose through
+  # VST3ClientExtensions — with emulation off that stub answers kResultFalse
+  # for every controller, so MIDI CC / pitch bend / channel pressure are never
+  # delivered at all in such hosts. With emulation on, that same always-available
+  # mapping routes every (channel, controller) to a hidden non-automatable
+  # "MIDI CC" parameter and the wrapper turns host parameter changes back into
+  # MIDI events for processBlock() — the standard JUCE-synth path. Hosts that
+  # query after connecting (REAPER) still receive our VST3ClientExtensions
+  # IMidiMapping with the legacy ParamIDs instead (user-provided interfaces win
+  # in the wrapper), exactly like the original plugin. See
+  # src/plugin/juce/vst3_midi_mapping.hpp and BUILD.md.
+  JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=1
   JUCE_DISPLAY_SPLASH_SCREEN=0
   JUCE_STRICT_REFCOUNTEDPOINTER=1)
 
