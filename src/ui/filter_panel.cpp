@@ -49,7 +49,9 @@ FilterPanel::FilterPanel(
         knobs.add(new Knob(bridge, specs[f].q,    "Q"));
         knobs.add(new Knob(bridge, specs[f].gain, "GAIN"));
 
-        knobs[f * 3]->set_center_value(1000.0);   /* 1 kHz at mid-travel */
+        /* Same exponential cutoff sweep as the effect filters: 20 Hz .. 20 kHz
+         * with 1.5 kHz at mid-travel. */
+        knobs[f * 3]->set_freq_range(20.0, 20000.0, 1500.0);
 
         for (int k = 0; k != 3; ++k) {
             knobs[f * 3 + k]->set_manager(&manager);

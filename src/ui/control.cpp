@@ -1387,6 +1387,13 @@ bool Control::hitTest(int x, int y)
 {
     juce::Point<float> const p((float)x, (float)y);
 
+    /* The sub-control (e.g. the macro curve square) is a child; JUCE won't route
+     * events to it at points where the parent hitTest is false, so its box must
+     * report a hit even though it sits outside the dial's ring. */
+    if (sub_control != nullptr && sub_control->getBounds().contains(x, y)) {
+        return true;
+    }
+
     /* The caption drags the value too, so grabbing a header knob by its label
      * feels the same as grabbing its dial. */
     if (label_pos != LabelPos::NONE && !label.isEmpty()

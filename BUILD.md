@@ -99,6 +99,12 @@ Output:
    cmake --build build
    ```
 
+   If using Visual Studio community edition, you can also use:
+   ```bat
+   cmake -B build -G "Visual Studio 17 2022" -A x64 -T ClangCL
+   cmake --build build --config Release
+    ```
+
 Output:
 - `build\JS80P_artefacts\Release\VST3\JS80P.vst3`
 - `build\JS80P_artefacts\Release\Standalone\JS80P.exe`

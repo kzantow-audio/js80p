@@ -17,7 +17,6 @@
  */
 
 #include <memory>
-#include <vector>
 
 #include "ui/macro_strip.hpp"
 
@@ -36,7 +35,9 @@ MacroStrip::MacroStrip(ParamBridge& bridge)
     for (int m = 1; m <= COUNT; ++m) {
         /* The macro rotary edits its MIN (base) / MAX (depth) directly; the
          * badge picks the input source and only then does it read as modulated.
-         * A distortion-curve square sits at the dial's bottom-right. */
+         * A single bipolar curve square sits at the dial's bottom-right: drag up
+         * for a logarithmic response (more DIST), down for exponential, centre
+         * for linear. It drives the macro's DST amount + DCV curve type. */
         Control* const cell = new Control(
             bridge, Modulation::macro_min(m), "M" + juce::String(m),
             Control::Style::ROTARY, Control::Size::SMALL
@@ -45,7 +46,7 @@ MacroStrip::MacroStrip(ParamBridge& bridge)
         cell->set_label_placement(Control::LabelPos::TOP);
         cell->set_value_display(Control::ValueDisplay::POPOVER);
         auto curve = std::make_unique<CurveSelector>(
-            bridge, std::vector<Synth::ParamId>{ Modulation::macro_dcv(m) }, false, true
+            bridge, Modulation::macro_dst(m), Modulation::macro_dcv(m)
         );
         CurveSelector* const curve_ptr = curve.get();
         cell->set_sub_control(std::move(curve), [curve_ptr]() { curve_ptr->refresh(); });

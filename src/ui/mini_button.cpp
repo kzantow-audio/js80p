@@ -34,7 +34,7 @@ namespace {
  * in whatever (taller) button height it is given, so enlarging the click target
  * does not enlarge the icon. Paired with generous horizontal padding on each side
  * of the glyph so the whole button is a large click target. */
-constexpr int ICON_GLYPH_H = 16;   /* ~110% of the original 14 (nearest even) */
+constexpr int ICON_GLYPH_H = 18;   /* enlarged for readability (nearest even) */
 constexpr int ICON_H_PAD = 6;
 
 
@@ -120,9 +120,9 @@ juce::Image MiniButton::preset_icon(Icon const which)
      * that sit at the top-left of the legacy Synth panel, with a 1px margin so the
      * antialiased edges are not clipped when the icon is scaled down. */
     switch (which) {
-        case Icon::OPEN:      return extract_glyph(18, 75, 44, 37);
-        case Icon::RANDOMIZE: return extract_glyph(63, 72, 45, 43);
-        case Icon::SAVE:      return extract_glyph(113, 70, 39, 48);
+        case Icon::OPEN:      return extract_glyph(19, 72, 61-19, 111-72);
+        case Icon::RANDOMIZE: return extract_glyph(64, 72, 108-64, 114-72);
+        case Icon::SAVE:      return extract_glyph(114, 72, 150-114, 111-72);
         default:              return juce::Image();
     }
 }
@@ -175,26 +175,16 @@ void MiniButton::paint(juce::Graphics& g)
     juce::Colour const c = Theme::ACCENT;
 
     /* Icon action buttons: no outline box, just the glyph tinted to the accent
-     * colour, centred within a wide (padded) click target. */
+     * colour (white on hover), centred within a wide (padded) click target. */
     if (icon.isValid()) {
-        if (hover) {
-            juce::Rectangle<float> const box = getLocalBounds().toFloat().reduced(0.5f);
-            g.setColour(c.withAlpha(0.18f));
-            g.fillRoundedRectangle(box, 2.0f);
-            /* Border only on hover (never shown otherwise). */
-            g.setColour(c);
-            g.drawRoundedRectangle(box, 2.0f, 1.0f);
-        }
-
         float const glyph_h = (float)ICON_GLYPH_H;
         float const scale = glyph_h / (float)icon.getHeight();
         float const glyph_w = (float)icon.getWidth() * scale;
         float const gx = ((float)getWidth() - glyph_w) * 0.5f;
         float const gy = ((float)getHeight() - glyph_h) * 0.5f;
 
-        /* Fill the glyph's alpha channel with the accent colour (brightened on
-         * hover) - a clean tint of the white-on-transparent icon. */
-        g.setColour(hover ? c.brighter(0.25f) : c);
+        /* Fill the glyph's alpha channel: accent normally, white on hover. */
+        g.setColour(hover ? juce::Colours::white : c);
         g.drawImageTransformed(
             icon,
             juce::AffineTransform::scale(scale).translated(gx, gy),
