@@ -439,19 +439,19 @@ void NewGui::init_patch()
 {
     /* 1. Keep the performance macros' MIDI-CC inputs across the reset. */
     Synth::ControllerId saved[MacroStrip::COUNT];
-    for (int m = 0; m != MacroStrip::COUNT; ++m) {
+    for (int m = 0; m < MacroStrip::COUNT; ++m) {
         saved[m] = bridge.controller(Modulation::macro_in(m + 1));
     }
 
     /* 2. Reset every parameter to its default and clear all controllers. */
-    for (int p = 0; p != (int)Synth::ParamId::PARAM_ID_COUNT; ++p) {
+    for (int p = 0; p < (int)Synth::ParamId::PARAM_ID_COUNT; ++p) {
         Synth::ParamId const id = (Synth::ParamId)p;
         bridge.assign_controller(id, Synth::ControllerId::NONE);
         bridge.set_ratio(id, bridge.get_default_ratio(id));
     }
 
     /* 3. Restore the saved macro CC inputs. */
-    for (int m = 0; m != MacroStrip::COUNT; ++m) {
+    for (int m = 0; m < MacroStrip::COUNT; ++m) {
         if (saved[m] != Synth::ControllerId::NONE) {
             bridge.assign_controller(Modulation::macro_in(m + 1), saved[m]);
         }
